@@ -37,7 +37,7 @@
 | `sense.lsp.autoRestart` | `true` | 语言服务异常结束后的自动重启 |
 | `sense.lsp.arguments` | `[]` | 附加给 `sense lsp` 的参数，非选项参数会转交给 `LSPServer` |
 | `sense.lsp.discovery` | `lazy` | 嵌套工程发现方式，可选 `lazy`、`eager`、`off`，对应 `CANGJIE_LSP_DISCOVERY` |
-| `sense.trace.server` | `off` | JSON-RPC 通信跟踪，可选 `off`、`messages`、`verbose` |
+| `sense.trace.server` | `off` | JSON-RPC 通信跟踪，可选 `off`、`messages`、`verbose`；报文写入 `sense Trace` 输出通道 |
 | `sense.codeCheck.onSave` | `false` | 保存 `.cj` 文件时执行 `cjlint` |
 | `sense.build.targetDir` | `""` | 传给 `sense build --target-dir` 的产物根目录，也用于定位 `sense.run` 要执行的文件；为空时使用工程默认的 `target` |
 
@@ -56,6 +56,15 @@
 - 覆盖率：`sense.coverage`、`sense.coverageFolder`
 - 工程：`sense.project.create`、`sense.project.create.view`
 - SDK：`sense.sdk.select`
+
+## 输出通道
+
+扩展创建两个日志通道：
+
+- `sense`：扩展自身的诊断、sense lsp 的 stderr 与语言客户端日志。状态栏的 `Open Log` 打开它。
+- `sense Trace`：`sense.trace.server` 打开时的 JSON-RPC 报文跟踪。状态栏的 `Open Trace` 打开它。
+
+两个通道都按日志级别过滤，其级别由用户在输出面板中切换。要看到跟踪报文，除了把 `sense.trace.server` 设为 `messages` 或 `verbose`，还需要把 `sense Trace` 通道的级别切到 `Trace`。
 
 ## 开发
 

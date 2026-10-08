@@ -305,6 +305,7 @@ export class SenseContext {
             },
             progressOnInitialization: true,
             outputChannel: OutputHelper.getChannel(),
+            traceOutputChannel: OutputHelper.getTraceChannel(),
             revealOutputChannelOn: RevealOutputChannelOn.Never,
             initializationOptions: {},
             synchronize: {

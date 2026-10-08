@@ -56,6 +56,7 @@ export class ServerStatusBar implements vscode.Disposable {
                 this.serverStatusBar.text = '$(sync~spin) sense';
                 this.serverStatusBar.tooltip = this.buildTooltip(version, 'State: Starting', [
                     '[Open Log](command:sense.openOutputPanel)',
+                    '[Open Trace](command:sense.openTracePanel)',
                 ]);
                 this.serverStatusBar.color = new vscode.ThemeColor('statusBarItem.warningForeground');
                 this.serverStatusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -64,6 +65,7 @@ export class ServerStatusBar implements vscode.Disposable {
                 this.serverStatusBar.text = 'sense';
                 this.serverStatusBar.tooltip = this.buildTooltip(version, 'State: Running', [
                     '[Open Log](command:sense.openOutputPanel)',
+                    '[Open Trace](command:sense.openTracePanel)',
                     '[Restart Server](command:sense.lsp.reLaunch)',
                     '[Stop Server](command:sense.lsp.stop)',
                 ]);
@@ -74,6 +76,7 @@ export class ServerStatusBar implements vscode.Disposable {
                 this.serverStatusBar.text = '$(sync~spin) sense';
                 this.serverStatusBar.tooltip = this.buildTooltip(version, 'State: Updating', [
                     '[Open Log](command:sense.openOutputPanel)',
+                    '[Open Trace](command:sense.openTracePanel)',
                 ]);
                 this.serverStatusBar.color = new vscode.ThemeColor('statusBarItem.warningForeground');
                 this.serverStatusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -82,6 +85,7 @@ export class ServerStatusBar implements vscode.Disposable {
                 this.serverStatusBar.text = '$(sync~spin) sense';
                 this.serverStatusBar.tooltip = this.buildTooltip(version, 'State: Building', [
                     '[Open Log](command:sense.openOutputPanel)',
+                    '[Open Trace](command:sense.openTracePanel)',
                 ]);
                 this.serverStatusBar.color = new vscode.ThemeColor('statusBarItem.warningForeground');
                 this.serverStatusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -90,6 +94,7 @@ export class ServerStatusBar implements vscode.Disposable {
                 this.serverStatusBar.text = '$(error) sense';
                 this.serverStatusBar.tooltip = this.buildTooltip(version, 'Server stopped', [
                     '[Open Log](command:sense.openOutputPanel)',
+                    '[Open Trace](command:sense.openTracePanel)',
                     '[Restart Server](command:sense.lsp.reLaunch)',
                 ]);
                 this.serverStatusBar.color = new vscode.ThemeColor('statusBarItem.errorForeground');

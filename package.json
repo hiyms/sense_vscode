@@ -224,7 +224,7 @@
               "verbose"
             ],
             "default": "off",
-            "description": "Trace the JSON-RPC communication between VS Code and the sense language server. Traces are written to the 'sense' output channel; raise that channel's log level to Trace in the Output panel to see them.",
+            "description": "Trace the JSON-RPC communication between VS Code and the sense language server. Traces are written to the 'sense Trace' output channel; raise that channel's log level to Trace in the Output panel to see them.",
             "order": 6
           },
           "sense.codeCheck.onSave": {
@@ -420,6 +420,11 @@
         "command": "sense.openOutputPanel",
         "title": "Open Sense Output",
         "category": "Sense"
+      },
+      {
+        "command": "sense.openTracePanel",
+        "title": "Open Sense Trace",
+        "category": "Sense"
       }
     ],
     "keybindings": [
@@ -454,6 +459,10 @@
         },
         {
           "command": "sense.openOutputPanel",
+          "when": "false"
+        },
+        {
+          "command": "sense.openTracePanel",
           "when": "false"
         },
         {

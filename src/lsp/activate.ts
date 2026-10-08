@@ -43,6 +43,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         })
     );
     context.subscriptions.push(
+        vscode.commands.registerCommand('sense.openTracePanel', () => {
+            OutputHelper.showTrace();
+        })
+    );
+    context.subscriptions.push(
         vscode.commands.registerCommand('sense.lsp.updateState', (state: any) => {
             getStatusBar().updateServerState(state);
         })
