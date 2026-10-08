@@ -1,10 +1,13 @@
-/** @file sense LSP 上下文管理，负责语言客户端生命周期、服务配置与环境变量设置 */
+/** @file sense LSP 上下文管理，负责语言客户端的生命周期、服务配置与环境变量设置 */
 
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as child_process from 'child_process';
 
 import {
+    CloseAction,
+    ErrorAction,
+    ErrorHandler,
     LanguageClient,
     LanguageClientOptions,
     ResponseError,
@@ -24,12 +27,14 @@ import { activate as activateHealthCheck } from './healthCheck';
 import { getStatusBar } from './statusBar';
 
 /**
- * sense 语言客户端，继承自 LanguageClient。
- * 重写请求失败处理、崩溃重启逻辑和日志输出行为。
+ * sense 语言客户端。
+ *
+ * 只负责请求失败处理、日志输出与把连接关闭事件上报给生命周期拥有者。
+ * 是否重启、何时重启由 {@link SenseContext} 决定。
  */
 export class SenseLanguageClient extends LanguageClient {
-    static restartCount = 0;
-    static restartTimestamps: number[] = [];
+    /** 连接关闭时通知生命周期拥有者 */
+    onClosed?: (client: SenseLanguageClient) => void;
 
     /** 处理失败的 LSP 请求：workspace/executeCommand 失败时弹窗提示错误信息 */
     handleFailedRequest(
@@ -54,13 +59,7 @@ export class SenseLanguageClient extends LanguageClient {
         }
     }
 
-    /** 重置重启计数器和时间戳 */
-    resetRestartCount(): void {
-        SenseLanguageClient.restartCount = 0;
-        SenseLanguageClient.restartTimestamps = [];
-    }
-
-    /** 处理连接关闭：更新状态，按配置决定是否自动重启 */
+    /** 处理连接关闭：交给拥有者判定是否需要重启 */
     async handleConnectionClosed(): Promise<void> {
         const originalHandler = Object.create(null, {
             handleConnectionClosed: {
@@ -68,52 +67,8 @@ export class SenseLanguageClient extends LanguageClient {
             },
         });
 
-        vscode.commands.executeCommand('sense.lsp.updateState', {
-            state: lspConstants.State.Error,
-        });
-
         await originalHandler.handleConnectionClosed.call(this);
-        await Utility.delay(lspConstants.delay100);
-
-        const autoRestartEnabled = vscode.workspace
-            .getConfiguration('sense.lsp')
-            .get<boolean>('autoRestart', true);
-
-        if (!autoRestartEnabled) {
-            const choice = await vscode.window.showErrorMessage(
-                'The sense language server has stopped. Auto-restart is disabled.',
-                'Restart Manually'
-            );
-            if (choice === 'Restart Manually') {
-                vscode.commands.executeCommand('sense.lsp.reLaunch', true);
-            }
-            return;
-        }
-
-        const now = Date.now();
-        SenseLanguageClient.restartTimestamps = SenseLanguageClient.restartTimestamps
-            .filter((t) => now - t < lspConstants.RESTART_WINDOW_MS);
-        SenseLanguageClient.restartTimestamps.push(now);
-
-        if (SenseLanguageClient.restartTimestamps.length > lspConstants.MAX_RESTART_COUNT) {
-            this.outputChannel.appendLine(
-                `The sense language server stopped ${lspConstants.MAX_RESTART_COUNT + 1} times in the last 5 minutes. The server will not be restarted.\n`
-            );
-            vscode.window.showErrorMessage(
-                `The sense language server stopped ${lspConstants.MAX_RESTART_COUNT + 1} times in the last 5 minutes. Auto-restart has been stopped.`
-            );
-            return;
-        }
-
-        this.outputChannel.appendLine(
-            `The sense language server stopped, try to restart ${SenseLanguageClient.restartTimestamps.length} times.`
-        );
-
-        await Utility.delay(lspConstants.RESTART_DELAY_MS);
-        vscode.window.showInformationMessage(
-            `sense language server stopped. Attempting auto-restart (${SenseLanguageClient.restartTimestamps.length}/${lspConstants.MAX_RESTART_COUNT})...`
-        );
-        vscode.commands.executeCommand('sense.lsp.reLaunch', true);
+        this.onClosed?.(this);
     }
 
     /** 将错误数据转换为可读字符串 */
@@ -149,22 +104,47 @@ class CompletionCapability implements vscode.Disposable {
 
 /** 初始化失败处理器：记录错误信息并阻止客户端继续 */
 const initializationFailedHandler: (error: any) => boolean = (error: any) => {
-    if (Utility.checkIsValid(error) && 'message' in error && SenseContext.clientInstance) {
-        SenseContext.clientInstance.error(error.message);
+    if (Utility.checkIsValid(error) && 'message' in error) {
+        context.client?.error(error.message);
     }
     return false;
 };
 
 /**
- * sense LSP 上下文，管理语言客户端、环境变量和服务配置。
+ * 错误处理器：连接关闭交由本扩展处理，避免库同时给出一条
+ * “will not be restarted”的相反提示。
  */
-export class SenseContext {
+const senseErrorHandler: ErrorHandler = {
+    error: () => ({ action: ErrorAction.Continue }),
+    closed: () => ({
+        action: CloseAction.DoNotRestart,
+        handled: true,
+        message: 'sense language server connection closed',
+    }),
+};
+
+/**
+ * sense LSP 上下文。
+ *
+ * 单例地拥有语言客户端与子进程传输，并对全部启动、重启、停止入口做串行化。
+ * 只有当前客户端在非主动关闭的情况下断开，才会安排自动重启。
+ */
+export class SenseContext implements vscode.Disposable {
     subscriptions: vscode.Disposable[] = [];
     client: SenseLanguageClient | null = null;
-    transport: SenseLspTransport | null = null;
     static envInfo: any = {};
     static cwd: string = '';
-    static clientInstance: SenseLanguageClient | null = null;
+
+    private transport: SenseLspTransport | null = null;
+    private extensionContext: vscode.ExtensionContext | undefined;
+    private startInFlight: Promise<void> | null = null;
+    private disposingCurrent = false;
+    private stoppedByUser = false;
+    private consecutiveFailures = 0;
+    private runningSince = 0;
+    private restartTimer: NodeJS.Timeout | undefined;
+
+    // ── 启动参数 ────────────────────────────────────────────────────
 
     /** 构建启动 sense lsp 的命令与参数 */
     private buildCommand(executable: string): { command: string; args: string[] } {
@@ -215,7 +195,7 @@ export class SenseContext {
         const { command, args } = this.buildCommand(executable);
         const runtimeDir = path.join(extensionContext.globalStorageUri.fsPath, 'lsp');
 
-        this.transport?.dispose();
+        this.releaseTransport();
         this.transport = spawnSenseLsp({
             executable: command,
             args,
@@ -258,41 +238,105 @@ export class SenseContext {
         }
     }
 
-    /**
-     * 依据 sense.trace.server 重新设置语言客户端的跟踪级别
-     *
-     * 库内会在配置变化时按输出通道日志级别重算跟踪开关，这里主动重设
-     * 以保持与配置一致。
-     */
+    /** 依据 sense.trace.server 重新设置语言客户端的跟踪级别 */
     async applyTraceSetting(): Promise<void> {
         if (!this.client) return;
         await this.client.setTrace(this.getTraceLevel());
     }
 
+    // ── 生命周期 ────────────────────────────────────────────────────
+
     /**
-     * 激活 LSP 客户端：创建客户端并启动。
-     * 状态流转：Stopped -> Starting -> Running。
+     * 激活入口：记录扩展上下文并确保语言服务在运行。
+     * 可重复调用，已在运行时直接返回。
      */
     async activate(extensionContext: vscode.ExtensionContext): Promise<void> {
+        this.extensionContext = extensionContext;
+        this.stoppedByUser = false;
+        await this.start();
+    }
+
+    /** 确保语言服务在运行 */
+    async start(): Promise<void> {
+        if (this.client && this.client.state === LspState.Running) return;
+        if (this.startInFlight) return this.startInFlight;
+        this.startInFlight = (async () => {
+            try {
+                await this.startClient();
+            } finally {
+                this.startInFlight = null;
+            }
+        })();
+        return this.startInFlight;
+    }
+
+    /** 重启：先完整释放当前客户端，再启动；并发调用复用同一次重启 */
+    async restart(): Promise<void> {
+        this.stoppedByUser = false;
+        this.clearRestartTimer();
+        await this.releaseCurrent();
+        await this.start();
+    }
+
+    /** 用户主动停止，抑制自动重启 */
+    async stopByUser(): Promise<void> {
+        this.stoppedByUser = true;
+        this.clearRestartTimer();
+        this.consecutiveFailures = 0;
+        await this.releaseCurrent();
+    }
+
+    /** 扩展释放 */
+    async dispose(): Promise<void> {
+        this.stoppedByUser = true;
+        this.clearRestartTimer();
+        await this.releaseCurrent();
+        this.subscriptions.forEach((d) => d.dispose());
+        this.subscriptions = [];
+    }
+
+    /** 获取 LSP 运行状态 */
+    getLspState(): boolean {
+        return Utility.checkIsValid(this.client) && this.client!.state === LspState.Running;
+    }
+
+    // ── 内部实现 ────────────────────────────────────────────────────
+
+    private async startClient(): Promise<void> {
+        const extensionContext = this.extensionContext;
+        if (!extensionContext) {
+            OutputHelper.appendLine('[activate] extension context is not available', true);
+            return;
+        }
+
         SenseContext.cwd = extensionContext.extensionPath;
         SenseContext.envInfo.sdkVersion = await this.getSdkVersion();
         SenseContext.envInfo.serverVersion = SenseContext.envInfo.sdkVersion;
 
-        const executable = Utility.findSenseExecutable();
-        if (executable === '') {
+        if (Utility.findSenseExecutable() === '') {
             OutputHelper.appendLine(
                 '[activate] sense executable not found, set sense.executablePath or add it to PATH',
                 true
             );
-        } else if (!Utility.isValidSdk()) {
+            OutputHelper.show();
+            void vscode.window.showErrorMessage(
+                'The sense executable was not found. Set sense.executablePath or add sense to PATH.'
+            );
+            return;
+        }
+        if (!Utility.isValidSdk()) {
             OutputHelper.appendLine(
                 '[activate] the Cangjie SDK path is not configured properly. Set sense.sdkPath or CANGJIE_HOME.',
                 true
             );
+            OutputHelper.show();
+            void vscode.window.showErrorMessage(
+                'The Cangjie SDK path was not configured. Set sense.sdkPath or the CANGJIE_HOME environment variable.'
+            );
+            return;
         }
 
         const serverOptions: ServerOptions = () => Promise.resolve(this.createTransport(extensionContext));
-
         const projectRoots = Utility.getProjectRoots();
         const primaryRoot = projectRoots.length > 0 ? projectRoots[0] : '';
 
@@ -308,6 +352,7 @@ export class SenseContext {
             traceOutputChannel: OutputHelper.getTraceChannel(),
             revealOutputChannelOn: RevealOutputChannelOn.Never,
             initializationOptions: {},
+            errorHandler: senseErrorHandler,
             synchronize: {
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*', false, true, false),
             },
@@ -321,25 +366,16 @@ export class SenseContext {
             },
         };
 
-        if (!this.client) {
-            this.client = new SenseLanguageClient(
-                'sense',
-                'sense Language Server',
-                serverOptions,
-                clientOptions
-            );
-            this.client.clientOptions.errorHandler = this.client.createDefaultErrorHandler(0);
-            this.client.registerFeature(new CompletionCapability() as any);
-
-            activateHealthCheck(this);
-
-            vscode.commands.executeCommand('sense.lsp.updateState', {
-                state: lspConstants.State.Stopped,
-                serverVersion: SenseContext.envInfo.serverVersion,
-            });
-        }
-
-        SenseContext.clientInstance = this.client;
+        const client = new SenseLanguageClient(
+            'sense',
+            'sense Language Server',
+            serverOptions,
+            clientOptions
+        );
+        client.onClosed = (closed) => this.handleClientClosed(closed);
+        client.registerFeature(new CompletionCapability() as any);
+        this.client = client;
+        activateHealthCheck(this);
 
         vscode.commands.executeCommand('sense.lsp.updateState', {
             state: lspConstants.State.Starting,
@@ -347,64 +383,135 @@ export class SenseContext {
         });
 
         try {
-            await this.client.start();
-            if (this.client.isRunning()) {
-                await this.client.setTrace(this.getTraceLevel());
-                vscode.commands.executeCommand('sense.lsp.updateState', {
-                    state: lspConstants.State.Running,
-                    serverVersion: SenseContext.envInfo.serverVersion,
-                });
-            }
-            Utility.serverRun = true;
+            await client.start();
         } catch (e: any) {
+            this.client = null;
+            this.releaseTransport();
             vscode.commands.executeCommand('sense.lsp.updateState', {
                 state: lspConstants.State.Stopped,
             });
-            SenseContext.clientInstance = null;
-            this.transport?.dispose();
-            this.transport = null;
             const errorMessage = e?.message ? e.message : String(e);
             OutputHelper.appendLine(`[activate] sense language server failed to start: ${errorMessage}`, true);
             OutputHelper.show();
-            vscode.window.showErrorMessage(`sense language server failed to start: ${errorMessage}`);
+            void vscode.window.showErrorMessage(`sense language server failed to start: ${errorMessage}`);
+            return;
         }
+
+        if (!client.isRunning()) return;
+
+        await client.setTrace(this.getTraceLevel());
+        this.runningSince = Date.now();
+        Utility.serverRun = true;
+        vscode.commands.executeCommand('sense.lsp.updateState', {
+            state: lspConstants.State.Running,
+            serverVersion: SenseContext.envInfo.serverVersion,
+        });
     }
 
-    /** 释放上下文：更新状态、销毁订阅、停止并清理客户端 */
-    async dispose(): Promise<void> {
+    /** 完整释放当前客户端与传输层 */
+    private async releaseCurrent(): Promise<void> {
+        const client = this.client;
+        this.client = null;
+        this.disposingCurrent = true;
+        try {
+            if (client) {
+                try {
+                    await client.stop();
+                } catch {
+                    // 释放阶段的错误忽略
+                }
+            }
+            this.releaseTransport();
+        } finally {
+            this.disposingCurrent = false;
+        }
+        Utility.serverRun = false;
         vscode.commands.executeCommand('sense.lsp.updateState', {
             state: lspConstants.State.Stopped,
+            serverVersion: SenseContext.envInfo.serverVersion,
         });
+    }
 
-        this.subscriptions.forEach((d) => d.dispose());
-        this.subscriptions = [];
+    private releaseTransport(): void {
+        this.transport?.dispose();
+        this.transport = null;
+    }
 
-        if (this.client) {
-            try {
-                await this.client.stop();
-            } catch {
-                // 释放阶段的错误忽略
-            }
-            this.client = null;
+    /**
+     * 连接关闭事件入口。
+     *
+     * 只有当前客户端且不是本扩展主动关闭时才安排重启；旧客户端的回调一律忽略。
+     */
+    private handleClientClosed(client: SenseLanguageClient): void {
+        if (client !== this.client) return;
+        this.client = null;
+        this.releaseTransport();
+        if (this.disposingCurrent) return;
+        this.scheduleRestart();
+    }
+
+    /** 按连续失败次数做指数退避，稳定运行后清零计数 */
+    private scheduleRestart(): void {
+        if (this.stoppedByUser) return;
+
+        const autoRestart = vscode.workspace
+            .getConfiguration('sense.lsp')
+            .get<boolean>('autoRestart', true);
+        if (!autoRestart) {
+            void vscode.window
+                .showErrorMessage(
+                    'The sense language server stopped. Auto-restart is disabled.',
+                    'Restart Manually'
+                )
+                .then((choice) => {
+                    if (choice === 'Restart Manually') void this.restart();
+                });
+            return;
         }
 
-        SenseContext.clientInstance = null;
-        this.transport?.dispose();
-        this.transport = null;
+        if (this.runningSince > 0 && Date.now() - this.runningSince >= lspConstants.STABLE_RESET_MS) {
+            this.consecutiveFailures = 0;
+        }
+        this.consecutiveFailures += 1;
+
+        if (this.consecutiveFailures > lspConstants.MAX_RESTART_COUNT) {
+            OutputHelper.appendLine(
+                `The sense language server stopped ${this.consecutiveFailures} times without a stable run. Auto-restart has been stopped.`,
+                true
+            );
+            OutputHelper.show();
+            void vscode.window.showErrorMessage(
+                'The sense language server keeps stopping. Auto-restart has been stopped. Use "Restart Language Server" to try again.'
+            );
+            return;
+        }
+
+        const delay = Math.min(
+            lspConstants.RESTART_DELAY_MS * 2 ** (this.consecutiveFailures - 1),
+            lspConstants.MAX_RESTART_DELAY_MS
+        );
+        OutputHelper.appendLine(
+            `The sense language server stopped, restart ${this.consecutiveFailures}/${lspConstants.MAX_RESTART_COUNT} in ${delay} ms.`,
+            true
+        );
+        vscode.commands.executeCommand('sense.lsp.updateState', {
+            state: lspConstants.State.Starting,
+            serverVersion: SenseContext.envInfo.serverVersion,
+        });
+
+        this.clearRestartTimer();
+        this.restartTimer = setTimeout(() => {
+            this.restartTimer = undefined;
+            if (this.stoppedByUser) return;
+            void this.restart();
+        }, delay);
     }
 
-    /** 获取 LSP 运行状态：客户端存在且为 Running 状态时返回 true */
-    getLspState(): boolean {
-        return Utility.checkIsValid(this.client) && this.client!.state === LspState.Running;
-    }
-
-    /** 停止 LSP 服务：释放客户端与子进程资源 */
-    stopLspServer(): void {
-        this.client?.dispose();
-        this.client = null;
-        SenseContext.clientInstance = null;
-        this.transport?.dispose();
-        this.transport = null;
+    private clearRestartTimer(): void {
+        if (this.restartTimer) {
+            clearTimeout(this.restartTimer);
+            this.restartTimer = undefined;
+        }
     }
 }
 

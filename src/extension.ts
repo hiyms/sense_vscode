@@ -15,46 +15,16 @@ const INCOMPATIBLE_EXTENSION_IDS = ['IDE-Innovation-Lab.cangjie', 'OpenCJ.cangji
 /** sense.sdkPath 的忽略值，写入后该工作区的扩展功能停用 */
 const SDK_DISABLED_VALUE = 'DISABLE';
 
-/** 是否已经启动过 LSP，避免重复激活 */
-let lspStarted = false;
+/** 用户取消过 SDK 选择后，本次会话不再重复弹出 */
+let sdkPickerDeclined = false;
 
 /**
- * 检查并提示 sense 相关的必要配置
+ * 在有工程时启动 LSP，必要时先弹出 SDK 选择器
+ *
+ * 可重复调用：语言服务的启动由 SenseContext 保证幂等。
  */
-function warnIfNotConfigured(): void {
-    if (Utility.findSenseExecutable() === '') {
-        vscode.window
-            .showWarningMessage(
-                'The sense executable was not found. Set sense.executablePath or add sense to PATH.',
-                'Open Settings'
-            )
-            .then((choice) => {
-                if (choice === 'Open Settings') {
-                    vscode.commands.executeCommand(
-                        'workbench.action.openSettings',
-                        'sense.executablePath'
-                    );
-                }
-            });
-    }
-    if (!Utility.isValidSdk()) {
-        vscode.window
-            .showWarningMessage(
-                'The Cangjie SDK path was not configured. Set sense.sdkPath or the CANGJIE_HOME environment variable.',
-                'Open Settings'
-            )
-            .then((choice) => {
-                if (choice === 'Open Settings') {
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'sense.sdkPath');
-                }
-            });
-    }
-}
-
-/** 在有工程时启动 LSP，必要时先弹出 SDK 选择器 */
 async function startLsp(context: vscode.ExtensionContext): Promise<void> {
-    if (lspStarted) return;
-    lspStarted = true;
+    if (sdkPickerDeclined) return;
 
     const sdkSetting = vscode.workspace.getConfiguration('sense').get<string>('sdkPath');
     if (sdkSetting === SDK_DISABLED_VALUE) {
@@ -67,11 +37,11 @@ async function startLsp(context: vscode.ExtensionContext): Promise<void> {
     if (shouldShowSdkPicker()) {
         const pickResult = await showSdkPicker();
         if (!pickResult) {
+            sdkPickerDeclined = true;
             OutputHelper.appendLine(
                 '[SDK Picker] User cancelled, LSP activation skipped (no SDK configured)',
                 true
             );
-            lspStarted = false;
             return;
         }
         if (pickResult.ignored) {
@@ -83,7 +53,6 @@ async function startLsp(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
-    warnIfNotConfigured();
     await lspActivate(context);
 }
 
@@ -125,8 +94,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
     }
 
-    Utility.serverRun = true;
-
     registerTomlUtil();
     await mainActivate(context);
     registerFileWatcher(context);
@@ -137,13 +104,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             if (!pickResult || pickResult.ignored) {
                 return;
             }
+            sdkPickerDeclined = false;
             const restart = await vscode.window.showInformationMessage(
                 'SDK path updated. Restart the sense language server to apply?',
                 'Restart Now',
                 'Later'
             );
             if (restart === 'Restart Now') {
-                vscode.commands.executeCommand('sense.lsp.reLaunch', true);
+                vscode.commands.executeCommand('sense.lsp.reLaunch');
             }
         })
     );

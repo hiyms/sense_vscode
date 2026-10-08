@@ -7,6 +7,8 @@ import { checkIsValid } from '../utils/commons';
 
 /** 终端名称 */
 const TERMINAL_NAME = 'sense';
+/** 未匹配命令结束事件的记录上限，避免终端集成不可用时长队 */
+const MAX_PENDING = 20;
 
 /** 待匹配的终端命令执行记录 */
 interface PendingExecution {
@@ -94,6 +96,9 @@ export class TerminalHelper {
             }
         }
 
+        if (this.pending.length >= MAX_PENDING) {
+            this.pending.shift();
+        }
         this.pending.push({
             command,
             reloadLsp: options.reloadLsp !== false,

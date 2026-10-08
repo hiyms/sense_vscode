@@ -13,29 +13,40 @@ import { SenseCli } from '../build/senseCli';
 /** cjcov 生成覆盖率报告的命令前缀，右键路径会追加到末尾 */
 const CJCOV_COMMAND = 'cjcov -o output --html-details -i ';
 
+/** 覆盖率报告目录名，位于工作区根目录 */
+const REPORT_DIR = 'output';
+
 /** 代码覆盖率 Webview，提供覆盖率检测、报告生成和查看功能 */
 export class CjcovWebview extends Webview {
-    private panelArray: vscode.WebviewPanel[] = [];
     private disposable: vscode.Disposable;
     private disposableFolder: vscode.Disposable;
+    private messageListener: vscode.Disposable | undefined;
+    private messageListenerPanel: vscode.WebviewPanel | null = null;
 
     constructor() {
         super();
         this.disposable = vscode.Disposable.from(
             vscode.commands.registerCommand("sense.coverage", (e: any) => {
-                this.init(e);
+                void this.init(e);
             })
         );
         this.disposableFolder = vscode.Disposable.from(
             vscode.commands.registerCommand("sense.coverageFolder", (e: any) => {
-                this.init(e);
+                void this.init(e);
             })
         );
     }
 
     /** 读取 HTML 文件并注入 VS Code webview 脚本，实现链接点击消息传递 */
     static html(htmlFileName: string): string {
-        const filePath = path.join(Utility.getWorkspaceFolders(), "output", htmlFileName);
+        const workspaceFolder = Utility.getWorkspaceFolders();
+        if (workspaceFolder === '') {
+            throw new Error('Open a project folder before opening a coverage report.');
+        }
+        const filePath = path.join(workspaceFolder, REPORT_DIR, htmlFileName);
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Coverage report file not found: ${filePath}`);
+        }
         let content = fs.readFileSync(filePath, "utf-8");
         content = content.replace(/(?<id><\/html>)/g, (match: string) => {
             return `
@@ -58,6 +69,7 @@ export class CjcovWebview extends Webview {
     dispose(): void {
         this.disposable.dispose();
         this.disposableFolder.dispose();
+        this.messageListener?.dispose();
     }
 
     /** 初始化覆盖率检测流程：更新依赖、运行带覆盖率的测试、生成并展示报告 */
@@ -67,31 +79,42 @@ export class CjcovWebview extends Webview {
             return;
         }
 
-        if (this.panelArray.length > 0) {
-            for (const panel of this.panelArray) {
-                panel.dispose();
-            }
-            this.panelArray.length = 0;
-        }
+        this.closePanel();
 
         const rightClickPath = Utility.rightClickPath(context);
-        const workspaceFolders = Utility.getWorkspaceFolders();
-
-        if (!(await this.execfunc(SenseCli.updateCommand(), workspaceFolders))) return;
-        if (!(await this.execfunc(SenseCli.testCommand({ coverage: true }), workspaceFolders))) return;
-
-        const success = await this.execfunc(CJCOV_COMMAND, workspaceFolders, rightClickPath);
-        if (success) {
-            super.newPanel("cjcovWebview", "index.html");
-            this.panel.webview.html = CjcovWebview.html("./index.html");
-            this.panelArray.push(this.panel);
-
-            this.panel.webview.onDidReceiveMessage((message: any) => {
-                super.newPanel("cjcovhtml", message.path);
-                this.panel.webview.html = CjcovWebview.html(message.path);
-                this.panelArray.push(this.panel);
-            });
+        const workspaceFolder = Utility.getWorkspaceFolders();
+        if (workspaceFolder === '') {
+            vscode.window.showErrorMessage("Open a project folder before running coverage.");
+            return;
         }
+
+        if (!(await this.execfunc(SenseCli.updateCommand(), workspaceFolder))) return;
+        if (!(await this.execfunc(SenseCli.testCommand({ coverage: true }), workspaceFolder))) return;
+        if (!(await this.execfunc(CJCOV_COMMAND, workspaceFolder, rightClickPath))) return;
+
+        try {
+            super.newPanel("cjcovWebview", "index.html");
+            this.attachMessageListener();
+            this.panel!.webview.html = CjcovWebview.html("./index.html");
+        } catch (e: any) {
+            OutputHelper.appendLine(`coverage report cannot be shown: ${e?.message ?? e}`);
+        }
+    }
+
+    /** 面板被替换时重新注册消息监听，复用同一面板时不重复注册 */
+    private attachMessageListener(): void {
+        if (this.messageListenerPanel === this.panel) return;
+        this.messageListener?.dispose();
+        this.messageListener = this.panel!.webview.onDidReceiveMessage((message: any) => {
+            try {
+                super.newPanel("cjcovhtml", message.path);
+                this.attachMessageListener();
+                this.panel!.webview.html = CjcovWebview.html(message.path);
+            } catch (e: any) {
+                OutputHelper.appendLine(`coverage report cannot be shown: ${e?.message ?? e}`);
+            }
+        });
+        this.messageListenerPanel = this.panel;
     }
 
     /** 执行 shell 命令并返回执行结果 */
@@ -103,14 +126,15 @@ export class CjcovWebview extends Webview {
 
         const exec = util.promisify(cp.exec);
         try {
-            const { stdout, stderr } = await exec(
+            const { stdout } = await exec(
                 Utility.getExecCmd(fullCommand),
                 { cwd, encoding: "binary" }
             );
             OutputHelper.appendLine(stdout);
             return true;
         } catch (error: any) {
-            OutputHelper.appendLine(Utility.translateMessage(error.stderr));
+            const detail = error?.stderr ?? error?.message ?? 'unknown error';
+            OutputHelper.appendLine(Utility.translateMessage(String(detail)));
             return false;
         }
     }
