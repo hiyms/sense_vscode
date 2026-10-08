@@ -238,6 +238,15 @@
             "default": "",
             "description": "Artifact root directory passed to sense build --target-dir and used to locate the executable run by sense.run. When empty, the target directory of the project is used.",
             "order": 8
+          },
+          "sense.lsp.runtimeEnv": {
+            "type": "object",
+            "default": {
+              "cjHeapSize": "4GB",
+              "cjStackSize": "8MB"
+            },
+            "description": "Environment variables given to the Cangjie runtime of the sense lsp process, such as cjHeapSize and cjStackSize. The unit is required and must be KB, MB or GB. Setting a name to an empty string removes it from the child process environment.",
+            "order": 9
           }
         }
       }

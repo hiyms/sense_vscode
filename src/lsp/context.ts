@@ -171,7 +171,7 @@ export class SenseContext implements vscode.Disposable {
 
     /** 组装子进程环境变量 */
     private buildEnv(): NodeJS.ProcessEnv {
-        const env: NodeJS.ProcessEnv = { ...process.env };
+        let env: NodeJS.ProcessEnv = { ...process.env };
         const cangjieHome = Utility.getCangjieHome();
         if (cangjieHome !== '') {
             env.CANGJIE_HOME = cangjieHome;
@@ -181,6 +181,32 @@ export class SenseContext implements vscode.Disposable {
             .get<string>('discovery');
         if (Utility.checkIsValid(discovery)) {
             env.CANGJIE_LSP_DISCOVERY = discovery;
+        }
+        const runtimeEnv = vscode.workspace
+            .getConfiguration('sense.lsp')
+            .get<Record<string, unknown>>('runtimeEnv') ?? {};
+        env = SenseContext.applyRuntimeEnv(env, runtimeEnv);
+        return env;
+    }
+
+    /**
+     * 把 sense.lsp.runtimeEnv 的取值合并进子进程环境
+     *
+     * 空字符串表示从子进程环境里移除该变量，非字符串取值忽略。
+     */
+    static applyRuntimeEnv(
+        base: NodeJS.ProcessEnv,
+        overrides: Record<string, unknown>
+    ): NodeJS.ProcessEnv {
+        const env: NodeJS.ProcessEnv = { ...base };
+        for (const name of Object.keys(overrides ?? {})) {
+            const value = overrides[name];
+            if (typeof value !== 'string') continue;
+            if (value === '') {
+                delete env[name];
+            } else {
+                env[name] = value;
+            }
         }
         return env;
     }
