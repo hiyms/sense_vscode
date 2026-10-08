@@ -123,6 +123,9 @@ const senseErrorHandler: ErrorHandler = {
     }),
 };
 
+/** 单次启动的等待上限，避免队列被卡死的 initialize 永久阻塞 */
+const START_TIMEOUT_MS = 45000;
+
 /**
  * sense LSP 上下文。
  *
@@ -137,8 +140,8 @@ export class SenseContext implements vscode.Disposable {
 
     private transport: SenseLspTransport | null = null;
     private extensionContext: vscode.ExtensionContext | undefined;
-    private startInFlight: Promise<void> | null = null;
-    private restartInFlight: Promise<void> | null = null;
+    /** 生命周期操作队列 */
+    private queue: Promise<void> = Promise.resolve();
     private disposingCurrent = false;
     private stoppedByUser = false;
     private consecutiveFailures = 0;
@@ -260,57 +263,61 @@ export class SenseContext implements vscode.Disposable {
 
     /** 确保语言服务在运行；用户主动停止期间不做任何事 */
     async start(): Promise<void> {
-        await this.startInternal(false);
-    }
-
-    /** 启动实现；force 用于显式重启路径绕开用户停止标记 */
-    private async startInternal(force: boolean): Promise<void> {
-        if (this.stoppedByUser && !force) return;
-        if (this.client && this.client.state === LspState.Running) return;
-        if (this.startInFlight) return this.startInFlight;
-        this.startInFlight = (async () => {
-            try {
-                await this.startClient();
-            } finally {
-                this.startInFlight = null;
-            }
-        })();
-        return this.startInFlight;
+        await this.runExclusive(async () => {
+            if (this.stoppedByUser) return;
+            await this.startIfNeeded();
+        });
     }
 
     /**
      * 重启：先完整释放当前客户端，再启动
      *
-     * 在途的重启会被后续调用复用，避免并发交错时释放掉新建客户端的传输层。
+     * 与启动、停止、释放一起排在同一条队列里，不会与其它入口交错。
      */
     async restart(): Promise<void> {
-        if (this.restartInFlight) return this.restartInFlight;
-        this.restartInFlight = (async () => {
-            try {
-                this.stoppedByUser = false;
-                this.clearRestartTimer();
-                await this.releaseCurrent();
-                await this.startInternal(true);
-            } finally {
-                this.restartInFlight = null;
-            }
-        })();
-        return this.restartInFlight;
+        await this.runExclusive(async () => {
+            this.stoppedByUser = false;
+            this.clearRestartTimer();
+            await this.releaseCurrent();
+            await this.startIfNeeded();
+        });
     }
 
     /** 用户主动停止，抑制自动重启 */
     async stopByUser(): Promise<void> {
-        this.stoppedByUser = true;
-        this.clearRestartTimer();
-        this.consecutiveFailures = 0;
-        await this.releaseCurrent();
+        await this.runExclusive(async () => {
+            this.stoppedByUser = true;
+            this.clearRestartTimer();
+            this.consecutiveFailures = 0;
+            await this.releaseCurrent();
+        });
+    }
+
+    /**
+     * 把所有生命周期操作串行化
+     *
+     * 启动、重启、停止、释放共用一条队列，避免一个操作在等待期间被另一个
+     * 操作插入，导致释放掉刚建立的客户端或丢掉一次重启。
+     */
+    private runExclusive<T>(task: () => Promise<T>): Promise<T> {
+        const result = this.queue.then(task, task);
+        this.queue = result.then(() => undefined, () => undefined);
+        return result;
+    }
+
+    /** 在队列内启动语言服务 */
+    private async startIfNeeded(): Promise<void> {
+        if (Utility.checkIsValid(this.client) && this.client!.state === LspState.Running) return;
+        await this.startClient();
     }
 
     /** 扩展释放 */
     async dispose(): Promise<void> {
-        this.stoppedByUser = true;
-        this.clearRestartTimer();
-        await this.releaseCurrent();
+        await this.runExclusive(async () => {
+            this.stoppedByUser = true;
+            this.clearRestartTimer();
+            await this.releaseCurrent();
+        });
         this.subscriptions.forEach((d) => d.dispose());
         this.subscriptions = [];
     }
@@ -405,7 +412,11 @@ export class SenseContext implements vscode.Disposable {
         });
 
         try {
-            await client.start();
+            await this.withTimeout(
+                client.start(),
+                START_TIMEOUT_MS,
+                'sense language server did not finish initializing in time'
+            );
         } catch (e: any) {
             this.client = null;
             this.releaseTransport();
@@ -419,6 +430,7 @@ export class SenseContext implements vscode.Disposable {
 
         if (!client.isRunning()) return;
 
+        this.clearRestartTimer();
         await client.setTrace(this.getTraceLevel());
         this.runningSince = Date.now();
         Utility.serverRun = true;
@@ -531,6 +543,8 @@ export class SenseContext implements vscode.Disposable {
         this.restartTimer = setTimeout(() => {
             this.restartTimer = undefined;
             if (this.stoppedByUser) return;
+            // 等待期间服务已被其它入口拉起时不再重启
+            if (this.getLspState()) return;
             void this.restart();
         }, delay);
     }
@@ -540,6 +554,23 @@ export class SenseContext implements vscode.Disposable {
             clearTimeout(this.restartTimer);
             this.restartTimer = undefined;
         }
+    }
+
+    /** 给异步操作加上等待上限 */
+    private withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error(message)), ms);
+            promise.then(
+                (value) => {
+                    clearTimeout(timer);
+                    resolve(value);
+                },
+                (error) => {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            );
+        });
     }
 }
 
