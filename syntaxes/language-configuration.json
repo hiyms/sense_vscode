@@ -1,0 +1,46 @@
+{
+    "comments": {
+        // symbol used for single line comment. Remove this entry if your language does not support line comments
+        "lineComment": "//",
+        // symbols used for start and end a block comment. Remove this entry if your language does not support block comments
+        "blockComment": [ "/*", "*/" ]
+    },
+    // symbols used as brackets
+    // delete ["{", "}"],
+    // bacause in the following case, vscode will crash
+    "brackets": [
+        ["{","}"],
+        ["[", "]"],
+        ["(", ")"]
+    ],
+    // symbols that are auto closed when typing
+    "autoClosingPairs": [
+        ["{", "}"],
+        ["b\"\"\"\"", ""],
+        ["b\"\"\"", ""],
+        ["b\"\"", ""],
+        ["b\"", "\""],
+        ["b''", ""],
+        ["b'", "'"],
+        ["/*","*/"],
+        ["\"\"\"", "\n\"\"\""],
+        ["\"\"", ""],
+        ["[", "]"],
+        ["(", ")"],
+        ["\"", "\""],
+        ["'", "'"],
+        ["r'", "'"],
+        ["r\"", "\""],
+    ],
+    // symbols that can be used to surround a selection
+    "surroundingPairs": [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"],
+        ["\"", "\""],
+        ["'", "'"]
+    ],
+    // defines what's considered as a word in the programming language
+    // ([a-zA-Z_][a-zA-Z0-9]*\\:\\:[a-zA-Z0-9]+) check org::package for complete
+    "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)"
+}

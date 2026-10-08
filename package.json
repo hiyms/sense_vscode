@@ -1,0 +1,552 @@
+{
+  "name": "sense",
+  "displayName": "Sense (Cangjie)",
+  "description": "Cangjie language support built on the sense package manager and its sense lsp language server",
+  "version": "0.1.0",
+  "publisher": "sense",
+  "license": "Apache-2.0",
+  "icon": "images/cangjie_icon.png",
+  "engines": {
+    "vscode": "^1.134.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "Cangjie",
+    "sense"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:Cangjie",
+    "workspaceContains:**/sense.toml",
+    "onCommand:sense.project.create",
+    "onCommand:sense.project.create.view",
+    "onCommand:sense.sdk.select",
+    "onCommand:sense.build",
+    "onCommand:sense.lsp.activate"
+  ],
+  "main": "./out/extension",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "sense (Cangjie) starts the sense language server and runs build, format and lint tools from the Cangjie SDK, so it requires a trusted workspace."
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run webpack",
+    "compile": "tsc -p ./",
+    "check": "tsc -p ./ --noEmit",
+    "webpack": "webpack --mode production",
+    "webpack-dev": "webpack --mode development --config webpack.dev.js",
+    "build": "pnpm run check && pnpm run webpack",
+    "watch": "tsc -watch -p ./",
+    "package": "pnpm run webpack && vsce package --no-dependencies",
+    "pretest": "pnpm run compile",
+    "test": "vscode-test"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "10.0.10",
+    "@types/node": "24.19.1",
+    "@types/vscode": "1.134.0",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "mocha": "12.0.3",
+    "terser-webpack-plugin": "5.6.1",
+    "ts-loader": "9.6.2",
+    "typescript": "5.9.3",
+    "webpack": "5.111.1",
+    "webpack-cli": "7.2.3",
+    "webpack-merge": "6.0.1"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "Cangjie",
+        "aliases": [
+          "Cangjie"
+        ],
+        "extensions": [
+          ".cj",
+          ".cj.macrocall"
+        ],
+        "configuration": "./syntaxes/language-configuration.json",
+        "icon": {
+          "light": "./fileicons/cangjie.svg",
+          "dark": "./fileicons/cangjie.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "Cangjie",
+        "scopeName": "source.cj",
+        "path": "./syntaxes/Cangjie.tmLanguage.json"
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "builtinType",
+        "description": "Built-in container and FFI types of Cangjie, e.g. Array, VArray, CPointer, CString, CFunc"
+      },
+      {
+        "id": "selfKeyword",
+        "description": "The `this` keyword of Cangjie"
+      },
+      {
+        "id": "typeAlias",
+        "description": "Cangjie `type` alias declarations and references"
+      },
+      {
+        "id": "attribute",
+        "description": "Cangjie annotations like @Deprecated"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "Cangjie",
+        "scopes": {
+          "builtinType": [
+            "support.type"
+          ],
+          "selfKeyword": [
+            "variable.language.self",
+            "variable.language.this",
+            "variable.language"
+          ],
+          "typeAlias": [
+            "entity.name.type"
+          ],
+          "attribute": [
+            "entity.name.attribute",
+            "entity.name.function"
+          ],
+          "parameter": [
+            "variable.parameter",
+            "variable.other.readwrite",
+            "variable.other"
+          ],
+          "macro": [
+            "entity.name.function.preprocessor",
+            "entity.name.function"
+          ],
+          "enum": [
+            "entity.name.type.enum",
+            "entity.name.type.class"
+          ],
+          "interface": [
+            "entity.name.type.interface",
+            "entity.name.type.class"
+          ],
+          "struct": [
+            "entity.name.type.struct",
+            "entity.name.type.class"
+          ],
+          "typeParameter": [
+            "entity.name.type.parameter",
+            "entity.name.type.class"
+          ],
+          "decorator": [
+            "entity.name.decorator",
+            "entity.name.function"
+          ],
+          "enumMember": [
+            "constant.numeric",
+            "variable.other.enummember",
+            "variable.other.constant"
+          ],
+          "namespace": [
+            "entity.name.namespace",
+            "entity.name.type"
+          ],
+          "member": [
+            "entity.name.function.member",
+            "entity.name.function"
+          ],
+          "label": [
+            "entity.name.label"
+          ]
+        }
+      }
+    ],
+    "configuration": [
+      {
+        "type": "object",
+        "title": "Sense",
+        "properties": {
+          "sense.sdkPath": {
+            "type": "string",
+            "default": "",
+            "description": "Absolute path of the Cangjie SDK (CANGJIE_HOME). When empty, the CANGJIE_HOME environment variable is used.",
+            "order": 1
+          },
+          "sense.executablePath": {
+            "type": "string",
+            "default": "",
+            "description": "Absolute path of the sense executable, or of a directory containing sense, sense_docs and cangjie-docs. When empty, these tools are searched on PATH.",
+            "order": 2
+          },
+          "sense.lsp.autoRestart": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically restart the sense language server when it stops unexpectedly.",
+            "order": 3
+          },
+          "sense.lsp.arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Extra arguments passed to sense lsp. Non-option arguments are forwarded to LSPServer.",
+            "order": 4
+          },
+          "sense.lsp.discovery": {
+            "type": "string",
+            "enum": [
+              "lazy",
+              "eager",
+              "off"
+            ],
+            "default": "lazy",
+            "description": "How nested Cangjie projects are discovered. lazy loads a project when a file inside it is opened, eager scans direct children of each workspace folder at startup, off only serves the workspace folder itself.",
+            "order": 5
+          },
+          "sense.trace.server": {
+            "type": "string",
+            "enum": [
+              "off",
+              "messages",
+              "verbose"
+            ],
+            "default": "off",
+            "description": "Trace the JSON-RPC communication between VS Code and the sense language server.",
+            "order": 6
+          },
+          "sense.codeCheck.onSave": {
+            "type": "boolean",
+            "default": false,
+            "description": "Run cjlint on the folder of the file being saved.",
+            "order": 7
+          },
+          "sense.build.targetDir": {
+            "type": "string",
+            "default": "",
+            "description": "Artifact root directory passed to sense build --target-dir and used to locate the executable run by sense.run. When empty, the target directory of the project is used.",
+            "order": 8
+          }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "sense.build",
+        "title": "Build",
+        "category": "Sense",
+        "icon": {
+          "dark": "images/hammer_dark.svg",
+          "light": "images/hammer_light.svg"
+        }
+      },
+      {
+        "command": "sense.build.release",
+        "title": "Build With Release Profile",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.clean",
+        "title": "Clean Build Artifacts",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.fetch",
+        "title": "Fetch Dependencies",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.update",
+        "title": "Update Dependencies",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.targetDir",
+        "title": "Build With Target Directory",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.jobs",
+        "title": "Build With Jobs",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.target",
+        "title": "Build With Target Triple",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.feature",
+        "title": "Build With Features",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.build.workspace",
+        "title": "Build All Workspace Members",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.run",
+        "title": "Run Code",
+        "category": "Sense",
+        "icon": "$(run)"
+      },
+      {
+        "command": "sense.test",
+        "title": "Test",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.test.noRun",
+        "title": "Test Without Running",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.test.skipBuild",
+        "title": "Test With Skip Build",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.test.coverage",
+        "title": "Test With Coverage",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.test.jobs",
+        "title": "Test With Jobs",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.test.filter",
+        "title": "Test With Filter",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.docs",
+        "title": "Generate Documentation",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.manifest.open",
+        "title": "Open sense.toml",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.format",
+        "title": "Format",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.formatFolder",
+        "title": "Format Folder",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.codeCheck",
+        "title": "CodeCheck",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.codeCheckFolder",
+        "title": "CodeCheck Folder",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.coverage",
+        "title": "Coverage",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.coverageFolder",
+        "title": "Coverage Folder",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.project.create",
+        "title": "Create Cangjie Project",
+        "category": "Sense",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sense.project.create.view",
+        "title": "Create Cangjie Project View",
+        "category": "Sense",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sense.sdk.select",
+        "title": "Select Cangjie SDK",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.require.refresh",
+        "title": "Refresh Dependencies",
+        "category": "Sense",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sense.lsp.activate",
+        "title": "Start Language Server",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.lsp.reLaunch",
+        "title": "Restart Language Server",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.lsp.stop",
+        "title": "Stop Language Server",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.lsp.state",
+        "title": "Get Language Server State",
+        "category": "Sense"
+      },
+      {
+        "command": "sense.openOutputPanel",
+        "title": "Open Sense Output",
+        "category": "Sense"
+      }
+    ],
+    "keybindings": [
+      {
+        "when": "editorTextFocus && editorLangId == Cangjie",
+        "command": "sense.codeCheck",
+        "key": "ctrl+alt+c"
+      },
+      {
+        "when": "editorTextFocus && editorLangId == Cangjie",
+        "command": "sense.coverage",
+        "key": "ctrl+alt+g"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sense.lsp.reLaunch",
+          "when": "false"
+        },
+        {
+          "command": "sense.lsp.state",
+          "when": "false"
+        },
+        {
+          "command": "sense.lsp.stop",
+          "when": "false"
+        },
+        {
+          "command": "sense.lsp.activate",
+          "when": "false"
+        },
+        {
+          "command": "sense.openOutputPanel",
+          "when": "false"
+        },
+        {
+          "command": "sense.sdk.select",
+          "when": "isLinux || isWindows || isMac"
+        },
+        {
+          "command": "sense.project.create",
+          "when": "isLinux || isWindows || isMac"
+        },
+        {
+          "command": "sense.project.create.view",
+          "when": "isLinux || isWindows || isMac"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "sense.run",
+          "when": "resourceExtname == .cj && sense.run.state",
+          "group": "navigation@0"
+        },
+        {
+          "command": "sense.build",
+          "when": "resourceExtname == .cj",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "editorLangId == Cangjie",
+          "command": "sense.build",
+          "group": "senseGroup@1"
+        },
+        {
+          "when": "editorLangId == Cangjie",
+          "command": "sense.run",
+          "group": "senseGroup@2"
+        },
+        {
+          "when": "resourceExtname == .cj",
+          "command": "sense.codeCheck",
+          "group": "senseGroup@3"
+        },
+        {
+          "when": "resourceExtname == .cj",
+          "command": "sense.coverage",
+          "group": "senseGroup@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .cj || explorerResourceIsFolder",
+          "command": "sense.codeCheckFolder",
+          "group": "senseGroup@1"
+        },
+        {
+          "when": "resourceExtname == .cj || explorerResourceIsFolder",
+          "command": "sense.coverageFolder",
+          "group": "senseGroup@2"
+        },
+        {
+          "when": "resourceExtname == .cj || explorerResourceIsFolder",
+          "command": "sense.formatFolder",
+          "group": "senseGroup@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "sense.require.refresh",
+          "when": "view == senseLibrary",
+          "group": "navigation@0"
+        },
+        {
+          "command": "sense.manifest.open",
+          "when": "view == senseLibrary",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sense.manifest.open",
+          "when": "view == senseLibrary",
+          "group": "inline@0"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "senseLibrary",
+          "name": "Sense"
+        }
+      ]
+    }
+  }
+}

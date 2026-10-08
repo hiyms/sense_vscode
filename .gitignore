@@ -1,0 +1,17 @@
+.vsix-extract
+.vscode
+node_modules/
+out/
+*.vsix
+.snapshots/
+.scratch/
+.verify-scratch/
+.review-scratch/
+.vscode-test/
+.ralph/
+.cache/
+target/
+coverage/
+test-fixtures/**/.vscode/
+test-fixtures/**/sense.lock
+test-fixtures/**/target/

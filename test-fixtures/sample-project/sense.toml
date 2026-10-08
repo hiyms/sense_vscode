@@ -1,0 +1,7 @@
+[module]
+name = "sample"
+version = "0.1.0"
+
+[features]
+defaults = []
+extra = []

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Create New Cangjie Project</title>
+
+	<link href="{{creat_css_uri}}" nonce="${nonce}" rel="stylesheet">
+</head>
+
+<body>
+	<div class="hap-container">
+		<div class="left-part">
+			<div class="padding-part">
+				<div>
+					<h1>Create New Cangjie Project</h1>
+				</div>
+
+				<div class="line">
+					<p>Select Output Type</p>
+					<select class="form-control" id="outputType">
+						<option class="select-option" value="executable">executable</option>
+						<option class="select-option" value="library">library</option>
+					</select>
+					<div class="triangulation"></div>
+				</div>
+
+				<div class="line">
+					<p><span class="red">* </span>Select Path</p>
+					<div class="input-group">
+						<input type="text" class="form-control" id="projectDir" readonly="readonly" placeholder="Please select the folder to be created">
+						<span class="input-group-addon btn" id="selectPathBtn">...</span>
+					</div>
+					<div id="showErrorPath" class="error">Please select the folder to be created.</div>
+				</div>
+
+				<div class="line">
+					<p><span class="red">* </span>Project Name</p>
+					<p>(Start with character. Only character, digits, '_' are allowed)</p>
+					<input type="text" class="form-control" id="projectName"
+					placeholder="Please input a valid project name"></input>
+					<div id="showErrorName" class="error">Please input a valid project name.</div>
+					<div id="showErrorRepeatsName" class="error">Repeats file name.</div>
+				</div>
+			</div>
+
+			<p class="hap-buttons padding-part">
+				<button class="btn btn-warning btn-hap" id="cancelBtn">Cancel</button>
+				<button class="btn btn-success btn-hap" id="completeBtn">Confirm</button>
+			</p>
+		</div>
+	</div>
+
+	<script nonce="${nonce}" src="{{creat_js_uri}}"></script>
+</body>
+
+</html>
