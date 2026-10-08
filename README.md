@@ -40,7 +40,7 @@
 | `sense.trace.server` | `off` | JSON-RPC 通信跟踪，可选 `off`、`messages`、`verbose`；报文写入 `sense Trace` 输出通道 |
 | `sense.codeCheck.onSave` | `false` | 保存 `.cj` 文件时执行 `cjlint` |
 | `sense.build.targetDir` | `""` | 传给 `sense build --target-dir` 的产物根目录，也用于定位 `sense.run` 要执行的文件；为空时使用工程默认的 `target` |
-| `sense.lsp.runtimeEnv` | `{ "cjHeapSize": "4GB", "cjStackSize": "8MB" }` | 交给 `sense lsp` 进程的仓颉运行时环境变量；取值必须带 `KB`、`MB` 或 `GB` 单位，设为空字符串则从子进程环境中移除该变量 |
+| `sense.lsp.runtimeEnv` | `{ "cjHeapSize": "700MB", "cjStackSize": "8MB" }` | 交给 `sense lsp` 进程的仓颉运行时环境变量；取值必须带 `KB`、`MB` 或 `GB` 单位，设为空字符串则从子进程环境中移除该变量 |
 
 ## 命令
 

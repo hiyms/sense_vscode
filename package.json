@@ -242,7 +242,7 @@
           "sense.lsp.runtimeEnv": {
             "type": "object",
             "default": {
-              "cjHeapSize": "4GB",
+              "cjHeapSize": "700MB",
               "cjStackSize": "8MB"
             },
             "description": "Environment variables given to the Cangjie runtime of the sense lsp process, such as cjHeapSize and cjStackSize. The unit is required and must be KB, MB or GB. Setting a name to an empty string removes it from the child process environment.",
