@@ -88,6 +88,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         })
     );
 
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration('sense.trace.server')) {
+                void ctx.applyTraceSetting();
+            }
+        })
+    );
+
     vscode.window.showInformationMessage('sense Language Server is now active!');
 
     await ctx.activate(context);

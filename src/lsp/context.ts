@@ -161,7 +161,6 @@ const initializationFailedHandler: (error: any) => boolean = (error: any) => {
 export class SenseContext {
     subscriptions: vscode.Disposable[] = [];
     client: SenseLanguageClient | null = null;
-    traceOutput: vscode.LogOutputChannel | undefined;
     transport: SenseLspTransport | null = null;
     static envInfo: any = {};
     static cwd: string = '';
@@ -260,6 +259,17 @@ export class SenseContext {
     }
 
     /**
+     * 依据 sense.trace.server 重新设置语言客户端的跟踪级别
+     *
+     * 库内会在配置变化时按输出通道日志级别重算跟踪开关，这里主动重设
+     * 以保持与配置一致。
+     */
+    async applyTraceSetting(): Promise<void> {
+        if (!this.client) return;
+        await this.client.setTrace(this.getTraceLevel());
+    }
+
+    /**
      * 激活 LSP 客户端：创建客户端并启动。
      * 状态流转：Stopped -> Starting -> Running。
      */
@@ -283,10 +293,6 @@ export class SenseContext {
 
         const serverOptions: ServerOptions = () => Promise.resolve(this.createTransport(extensionContext));
 
-        if (!this.traceOutput) {
-            this.traceOutput = vscode.window.createOutputChannel('sense Language Server Trace', { log: true });
-        }
-
         const projectRoots = Utility.getProjectRoots();
         const primaryRoot = projectRoots.length > 0 ? projectRoots[0] : '';
 
@@ -298,7 +304,7 @@ export class SenseContext {
                 index: 0,
             },
             progressOnInitialization: true,
-            outputChannel: this.traceOutput,
+            outputChannel: OutputHelper.getChannel(),
             revealOutputChannelOn: RevealOutputChannelOn.Never,
             initializationOptions: {},
             synchronize: {
