@@ -37,8 +37,9 @@
 | `sense.lsp.autoRestart` | `true` | 语言服务异常结束后的自动重启 |
 | `sense.lsp.arguments` | `[]` | 附加给 `sense lsp` 的参数，非选项参数会转交给 `LSPServer` |
 | `sense.lsp.discovery` | `lazy` | 嵌套工程发现方式，可选 `lazy`、`eager`、`off`，对应 `CANGJIE_LSP_DISCOVERY` |
-| `sense.lsp.trace.server` | `off` | JSON-RPC 通信跟踪，可选 `off`、`messages`、`verbose` |
+| `sense.trace.server` | `off` | JSON-RPC 通信跟踪，可选 `off`、`messages`、`verbose` |
 | `sense.codeCheck.onSave` | `false` | 保存 `.cj` 文件时执行 `cjlint` |
+| `sense.build.targetDir` | `""` | 传给 `sense build --target-dir` 的产物根目录，也用于定位 `sense.run` 要执行的文件；为空时使用工程默认的 `target` |
 
 ## 命令
 

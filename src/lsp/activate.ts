@@ -98,6 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(tomlWatcher, lockWatcher);
 
     const onManifestChanged = async () => {
+        Utility.refreshManifestRoots();
         if (!ctx.getLspState()) return;
         await restartLsp(context);
     };

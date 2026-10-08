@@ -12,9 +12,39 @@ import * as child_process from 'child_process';
 import { TextDecoder } from 'util';
 import * as vscode from 'vscode';
 import { parse as parseToml } from './toml';
-import { checkIsValid, findPathInSystemEnv, getExecSuffix } from './commons';
+import { checkIsValid, getExecSuffix } from './commons';
 import { OutputHelper } from './outputHelper';
 import { senseTomlName } from './constants';
+
+/** 工程根目录扫描的最大深度 */
+const MAX_SEARCH_DEPTH = 4;
+/** 工程根目录扫描的最大数量 */
+const MAX_PROJECT_ROOTS = 20;
+/** 扫描时跳过的目录名 */
+const SKIPPED_DIRECTORIES = new Set(['node_modules', 'target', '.git', '.cache', '.vscode', '.vscode-test']);
+
+/** 递归收集目录下的 sense.toml 所在目录 */
+function collectManifestRoots(baseDir: string, depth: number, roots: string[]): void {
+    if (depth < 0 || roots.length >= MAX_PROJECT_ROOTS) return;
+
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(baseDir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+
+    if (fs.existsSync(path.join(baseDir, senseTomlName))) {
+        roots.push(baseDir);
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
+        collectManifestRoots(path.join(baseDir, entry.name), depth - 1, roots);
+        if (roots.length >= MAX_PROJECT_ROOTS) return;
+    }
+}
 
 /**
  * 仓颉扩展全局工具类
@@ -24,6 +54,8 @@ import { senseTomlName } from './constants';
 export class Utility {
     /** LSP 服务是否正在运行 */
     static serverRun = false;
+    /** 工程根目录扫描缓存，null 表示需要重新扫描 */
+    private static manifestRootsCache: string[] | null = null;
     /** TOML 解析器是否已注册 */
     static tomlRegister = false;
     /** Windows 路径最大长度限制 */
@@ -109,11 +141,6 @@ export class Utility {
         return executable === '' ? '' : path.dirname(executable);
     }
 
-    /** 异步在 PATH 中查找 sense，用于首次配置提示 */
-    static async findSenseOnPathAsync(): Promise<string[]> {
-        return findPathInSystemEnv(Utility.getSenseExecutableName());
-    }
-
     // ── Workspace ───────────────────────────────────────────────────
 
     /**
@@ -147,8 +174,8 @@ export class Utility {
     /**
      * 收集全部仓颉工程根目录
      *
-     * 来源有两处：含 sense.toml 的工作区根目录；以及用户打开的任意位置
-     * 的 sense.toml 所在目录。返回值去重后的绝对路径数组。
+     * 来源有两处：工作区目录下（含嵌套子目录）的 sense.toml；以及用户打开的任意
+     * 位置 sense.toml 所在目录。返回值去重后的绝对路径数组。
      */
     static getProjectRoots(): string[] {
         const roots: string[] = [];
@@ -156,10 +183,11 @@ export class Utility {
             if (dir && !roots.includes(dir)) roots.push(dir);
         };
 
-        for (const folder of vscode.workspace.workspaceFolders ?? []) {
-            if (fs.existsSync(path.join(folder.uri.fsPath, senseTomlName))) {
-                push(folder.uri.fsPath);
-            }
+        if (Utility.manifestRootsCache === null) {
+            Utility.manifestRootsCache = Utility.computeManifestRoots();
+        }
+        for (const dir of Utility.manifestRootsCache) {
+            push(dir);
         }
 
         for (const document of vscode.workspace.textDocuments) {
@@ -171,11 +199,19 @@ export class Utility {
         return roots;
     }
 
-    /** 判断某个工作区根目录（或给定目录）下是否存在 sense.toml */
-    static hasSenseToml(dirPath: string = ''): boolean {
-        const basePath = checkIsValid(dirPath) ? dirPath : Utility.getWorkspaceFolders();
-        if (!basePath) return false;
-        return fs.existsSync(path.join(basePath, senseTomlName));
+    /** 清空工程根目录缓存，下次调用 getProjectRoots 时重新扫描 */
+    static refreshManifestRoots(): void {
+        Utility.manifestRootsCache = null;
+    }
+
+    /** 扫描工作区目录下（含有限深度的子目录）的 sense.toml */
+    private static computeManifestRoots(): string[] {
+        const roots: string[] = [];
+        for (const folder of vscode.workspace.workspaceFolders ?? []) {
+            collectManifestRoots(folder.uri.fsPath, MAX_SEARCH_DEPTH, roots);
+            if (roots.length >= MAX_PROJECT_ROOTS) break;
+        }
+        return roots.slice(0, MAX_PROJECT_ROOTS);
     }
 
     /** 判断当前工作区是否为仓颉工程 */

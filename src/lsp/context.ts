@@ -287,8 +287,16 @@ export class SenseContext {
             this.traceOutput = vscode.window.createOutputChannel('sense Language Server Trace', { log: true });
         }
 
+        const projectRoots = Utility.getProjectRoots();
+        const primaryRoot = projectRoots.length > 0 ? projectRoots[0] : '';
+
         const clientOptions: LanguageClientOptions = {
             documentSelector: [{ scheme: 'file', language: lspConstants.cangjieLanguageId }],
+            workspaceFolder: primaryRoot === '' ? undefined : {
+                uri: vscode.Uri.file(primaryRoot),
+                name: path.basename(primaryRoot),
+                index: 0,
+            },
             progressOnInitialization: true,
             outputChannel: this.traceOutput,
             revealOutputChannelOn: RevealOutputChannelOn.Never,

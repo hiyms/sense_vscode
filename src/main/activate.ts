@@ -117,12 +117,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const watcher = vscode.workspace.createFileSystemWatcher('**/sense.toml');
     context.subscriptions.push(watcher);
     const onManifestChanged = () => {
+        Utility.refreshManifestRoots();
         LibTreeView._instance?.refresh();
         refreshRunState();
     };
     context.subscriptions.push(watcher.onDidChange(onManifestChanged));
     context.subscriptions.push(watcher.onDidCreate(onManifestChanged));
     context.subscriptions.push(watcher.onDidDelete(onManifestChanged));
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            Utility.refreshManifestRoots();
+            LibTreeView._instance?.refresh();
+            refreshRunState();
+        })
+    );
 }
 
 /** 注册 Windows 平台文件监听：检测超长路径的创建和重命名操作 */

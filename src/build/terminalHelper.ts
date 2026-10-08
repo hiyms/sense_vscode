@@ -36,7 +36,7 @@ export class TerminalHelper {
         context.subscriptions.push(
             vscode.window.onDidEndTerminalShellExecution((event) => {
                 if (event.terminal.name !== TERMINAL_NAME) return;
-                const commandLine = event.execution.commandLine.trim();
+                const commandLine = event.execution.commandLine.value.trim();
                 const index = this.pending.findIndex((item) => item.command.trim() === commandLine);
                 if (index < 0) return;
                 const [item] = this.pending.splice(index, 1);
