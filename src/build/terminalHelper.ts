@@ -108,6 +108,11 @@ export class TerminalHelper {
         this.senseTerminal.show(false);
     }
 
+    /** 是否有命令在结束后会触发语言服务重启 */
+    static willReloadOnCompletion(): boolean {
+        return TerminalHelper.pending.some((item) => item.reloadLsp);
+    }
+
     /** 清理所有已打开的 sense 终端面板 */
     static clearPanels(): void {
         this.pending = [];

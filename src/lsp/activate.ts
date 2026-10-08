@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 import { Utility } from '../utils/utility';
 import { OutputHelper } from '../utils/outputHelper';
+import { TerminalHelper } from '../build/terminalHelper';
 import { context as lspContext } from './context';
 import { getStatusBar } from './statusBar';
 import { senseTomlName, senseLockName } from '../utils/constants';
@@ -90,6 +91,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         const onManifestChanged = async () => {
             Utility.refreshManifestRoots();
+            // 构建或测试进行中：由命令结束时统一重启，避免同一次构建触发两次
+            if (TerminalHelper.willReloadOnCompletion()) return;
             if (!ctx.getLspState()) return;
             await ctx.restart();
         };

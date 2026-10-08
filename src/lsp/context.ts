@@ -138,6 +138,7 @@ export class SenseContext implements vscode.Disposable {
     private transport: SenseLspTransport | null = null;
     private extensionContext: vscode.ExtensionContext | undefined;
     private startInFlight: Promise<void> | null = null;
+    private restartInFlight: Promise<void> | null = null;
     private disposingCurrent = false;
     private stoppedByUser = false;
     private consecutiveFailures = 0;
@@ -247,17 +248,24 @@ export class SenseContext implements vscode.Disposable {
     // ── 生命周期 ────────────────────────────────────────────────────
 
     /**
-     * 激活入口：记录扩展上下文并确保语言服务在运行。
-     * 可重复调用，已在运行时直接返回。
+     * 激活入口：记录扩展上下文并确保语言服务在运行
+     *
+     * 可重复调用。用户主动停止过之后不再自动拉起，需要显式的重启命令。
      */
     async activate(extensionContext: vscode.ExtensionContext): Promise<void> {
         this.extensionContext = extensionContext;
-        this.stoppedByUser = false;
+        if (this.stoppedByUser) return;
         await this.start();
     }
 
-    /** 确保语言服务在运行 */
+    /** 确保语言服务在运行；用户主动停止期间不做任何事 */
     async start(): Promise<void> {
+        await this.startInternal(false);
+    }
+
+    /** 启动实现；force 用于显式重启路径绕开用户停止标记 */
+    private async startInternal(force: boolean): Promise<void> {
+        if (this.stoppedByUser && !force) return;
         if (this.client && this.client.state === LspState.Running) return;
         if (this.startInFlight) return this.startInFlight;
         this.startInFlight = (async () => {
@@ -270,12 +278,24 @@ export class SenseContext implements vscode.Disposable {
         return this.startInFlight;
     }
 
-    /** 重启：先完整释放当前客户端，再启动；并发调用复用同一次重启 */
+    /**
+     * 重启：先完整释放当前客户端，再启动
+     *
+     * 在途的重启会被后续调用复用，避免并发交错时释放掉新建客户端的传输层。
+     */
     async restart(): Promise<void> {
-        this.stoppedByUser = false;
-        this.clearRestartTimer();
-        await this.releaseCurrent();
-        await this.start();
+        if (this.restartInFlight) return this.restartInFlight;
+        this.restartInFlight = (async () => {
+            try {
+                this.stoppedByUser = false;
+                this.clearRestartTimer();
+                await this.releaseCurrent();
+                await this.startInternal(true);
+            } finally {
+                this.restartInFlight = null;
+            }
+        })();
+        return this.restartInFlight;
     }
 
     /** 用户主动停止，抑制自动重启 */
@@ -319,6 +339,7 @@ export class SenseContext implements vscode.Disposable {
                 true
             );
             OutputHelper.show();
+            this.reportStopped();
             void vscode.window.showErrorMessage(
                 'The sense executable was not found. Set sense.executablePath or add sense to PATH.'
             );
@@ -330,6 +351,7 @@ export class SenseContext implements vscode.Disposable {
                 true
             );
             OutputHelper.show();
+            this.reportStopped();
             void vscode.window.showErrorMessage(
                 'The Cangjie SDK path was not configured. Set sense.sdkPath or the CANGJIE_HOME environment variable.'
             );
@@ -387,9 +409,7 @@ export class SenseContext implements vscode.Disposable {
         } catch (e: any) {
             this.client = null;
             this.releaseTransport();
-            vscode.commands.executeCommand('sense.lsp.updateState', {
-                state: lspConstants.State.Stopped,
-            });
+            this.reportStopped();
             const errorMessage = e?.message ? e.message : String(e);
             OutputHelper.appendLine(`[activate] sense language server failed to start: ${errorMessage}`, true);
             OutputHelper.show();
@@ -411,7 +431,9 @@ export class SenseContext implements vscode.Disposable {
     /** 完整释放当前客户端与传输层 */
     private async releaseCurrent(): Promise<void> {
         const client = this.client;
+        const transport = this.transport;
         this.client = null;
+        this.transport = null;
         this.disposingCurrent = true;
         try {
             if (client) {
@@ -421,15 +443,11 @@ export class SenseContext implements vscode.Disposable {
                     // 释放阶段的错误忽略
                 }
             }
-            this.releaseTransport();
+            transport?.dispose();
         } finally {
             this.disposingCurrent = false;
         }
-        Utility.serverRun = false;
-        vscode.commands.executeCommand('sense.lsp.updateState', {
-            state: lspConstants.State.Stopped,
-            serverVersion: SenseContext.envInfo.serverVersion,
-        });
+        this.reportStopped();
     }
 
     private releaseTransport(): void {
@@ -446,8 +464,18 @@ export class SenseContext implements vscode.Disposable {
         if (client !== this.client) return;
         this.client = null;
         this.releaseTransport();
+        this.reportStopped();
         if (this.disposingCurrent) return;
         this.scheduleRestart();
+    }
+
+    /** 统一上报停止状态，避免状态栏与实际运行状态不一致 */
+    private reportStopped(): void {
+        Utility.serverRun = false;
+        vscode.commands.executeCommand('sense.lsp.updateState', {
+            state: lspConstants.State.Stopped,
+            serverVersion: SenseContext.envInfo.serverVersion,
+        });
     }
 
     /** 按连续失败次数做指数退避，稳定运行后清零计数 */
