@@ -20,8 +20,9 @@ interface PendingExecution {
 /**
  * 终端辅助工具类，用于在 VS Code 集成终端里执行 sense 命令
  *
- * 命令结束由 vscode.window.onDidEndTerminalShellExecution 通知，据此在
- * 构建或测试结束后重启语言服务以加载新的产物。
+ * 复用同一个终端，不主动结束正在运行的命令；命令结束由
+ * vscode.window.onDidEndTerminalShellExecution 通知，据此在构建或测试结束后
+ * 重启语言服务以加载新的产物。
  */
 export class TerminalHelper {
     static context: vscode.ExtensionContext | undefined;
@@ -29,7 +30,7 @@ export class TerminalHelper {
     private static pending: PendingExecution[] = [];
     private static registered = false;
 
-    /** 注册终端命令结束监听，只注册一次 */
+    /** 注册终端命令结束监听与终端释放，只注册一次 */
     static register(context: vscode.ExtensionContext): void {
         this.context = context;
         if (this.registered) return;
@@ -49,6 +50,13 @@ export class TerminalHelper {
                 item.onComplete?.();
             })
         );
+
+        context.subscriptions.push({ dispose: () => this.clearPanels() });
+    }
+
+    /** 是否有命令在结束后会触发语言服务重启 */
+    static willReloadOnCompletion(): boolean {
+        return TerminalHelper.pending.some((item) => item.reloadLsp);
     }
 
     /**
@@ -60,41 +68,7 @@ export class TerminalHelper {
         command: string,
         options: { reloadLsp?: boolean; onComplete?: () => void } = {}
     ): Promise<void> {
-        this.clearPanels();
-
-        const osName = Utility.getOsSystem();
-        const defaultProfile = vscode.workspace
-            .getConfiguration('terminal.integrated.defaultProfile')
-            .get(osName);
-
-        if (checkIsValid(defaultProfile)) {
-            this.senseTerminal = vscode.window.createTerminal({ name: TERMINAL_NAME });
-        } else {
-            let shellPath = '/bin/bash';
-            let shellArgs: string[] = [];
-
-            if (process.platform === 'win32') {
-                shellPath = 'C:\\Windows\\System32\\cmd.exe';
-                shellArgs = ['/K', 'chcp 65001'];
-            }
-
-            this.senseTerminal = vscode.window.createTerminal({
-                name: TERMINAL_NAME,
-                shellPath,
-                shellArgs,
-            });
-
-            const cangjieHome = Utility.getCangjieHome();
-            if (process.platform === 'win32') {
-                if (cangjieHome !== '') {
-                    this.senseTerminal.sendText(`${path.join(cangjieHome, 'envsetup.bat')}`);
-                }
-                this.senseTerminal.sendText('cls');
-            } else if (cangjieHome !== '') {
-                this.senseTerminal.sendText(`source ${path.join(cangjieHome, 'envsetup.sh')}`);
-                this.senseTerminal.sendText('clear');
-            }
-        }
+        const terminal = this.ensureTerminal();
 
         if (this.pending.length >= MAX_PENDING) {
             this.pending.shift();
@@ -104,22 +78,60 @@ export class TerminalHelper {
             reloadLsp: options.reloadLsp !== false,
             onComplete: options.onComplete,
         });
-        this.senseTerminal.sendText(command);
-        this.senseTerminal.show(false);
+        terminal.sendText(command);
+        terminal.show(false);
     }
 
-    /** 是否有命令在结束后会触发语言服务重启 */
-    static willReloadOnCompletion(): boolean {
-        return TerminalHelper.pending.some((item) => item.reloadLsp);
+    /** 获取可用的终端，没有或已结束时创建 */
+    private static ensureTerminal(): vscode.Terminal {
+        if (this.senseTerminal && this.senseTerminal.exitStatus === undefined) {
+            return this.senseTerminal;
+        }
+
+        const osName = Utility.getOsSystem();
+        const defaultProfile = vscode.workspace
+            .getConfiguration('terminal.integrated.defaultProfile')
+            .get(osName);
+
+        if (checkIsValid(defaultProfile)) {
+            this.senseTerminal = vscode.window.createTerminal({ name: TERMINAL_NAME });
+            return this.senseTerminal;
+        }
+
+        let shellPath = '/bin/bash';
+        let shellArgs: string[] = [];
+        if (process.platform === 'win32') {
+            shellPath = 'C:\\Windows\\System32\\cmd.exe';
+            shellArgs = ['/K', 'chcp 65001'];
+        }
+
+        const terminal = vscode.window.createTerminal({
+            name: TERMINAL_NAME,
+            shellPath,
+            shellArgs,
+        });
+        this.senseTerminal = terminal;
+
+        const cangjieHome = Utility.getCangjieHome();
+        if (process.platform === 'win32') {
+            if (cangjieHome !== '') {
+                terminal.sendText(`${path.join(cangjieHome, 'envsetup.bat')}`);
+            }
+            terminal.sendText('cls');
+        } else if (cangjieHome !== '') {
+            terminal.sendText(`source ${path.join(cangjieHome, 'envsetup.sh')}`);
+            terminal.sendText('clear');
+        }
+        return terminal;
     }
 
-    /** 清理所有已打开的 sense 终端面板 */
+    /** 释放终端并清空待匹配记录 */
     static clearPanels(): void {
         this.pending = [];
-        for (const terminal of vscode.window.terminals) {
-            if (terminal.name === TERMINAL_NAME) {
-                terminal.dispose();
-            }
+        const terminal = this.senseTerminal;
+        this.senseTerminal = undefined;
+        if (terminal && terminal.exitStatus === undefined) {
+            terminal.dispose();
         }
     }
 }

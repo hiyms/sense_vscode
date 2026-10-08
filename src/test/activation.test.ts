@@ -1,4 +1,4 @@
-/** @file 激活条件测试：只有存在 sense.toml 时才启用语言服务 */
+/** @file 激活条件测试：只处理 sense.toml 工程，且命令在没有工程时也可用 */
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
@@ -20,29 +20,26 @@ async function hasManifest(): Promise<boolean> {
 
 suite('激活条件', () => {
     test('没有 sense.toml 时不启动语言服务', async () => {
-        const extension = vscode.extensions.getExtension(EXTENSION_ID);
-        await extension!.activate();
+        await vscode.extensions.getExtension(EXTENSION_ID)!.activate();
 
         if (await hasManifest()) {
             // 本配置用于验证相反的分支
             return;
         }
 
-        const commands = await vscode.commands.getCommands(true);
-        assert.ok(!commands.includes('sense.lsp.state'), '没有 sense.toml 时不应注册语言服务命令');
-        assert.ok(!commands.includes('sense.lsp.reLaunch'), '没有 sense.toml 时不应注册语言服务命令');
+        const running = await vscode.commands.executeCommand<boolean>('sense.lsp.state');
+        assert.strictEqual(running, false, '没有 sense.toml 时语言服务不应在运行');
     });
 
-    test('存在 sense.toml 时注册语言服务命令', async () => {
-        const extension = vscode.extensions.getExtension(EXTENSION_ID);
-        await extension!.activate();
+    test('没有 sense.toml 时语言服务命令仍然可用，便于用户补救', async () => {
+        await vscode.extensions.getExtension(EXTENSION_ID)!.activate();
 
-        if (!(await hasManifest())) {
+        if (await hasManifest()) {
             return;
         }
 
         const commands = await vscode.commands.getCommands(true);
-        assert.ok(commands.includes('sense.lsp.state'), '存在 sense.toml 时应注册语言服务命令');
-        assert.ok(commands.includes('sense.lsp.reLaunch'), '存在 sense.toml 时应注册语言服务命令');
+        assert.ok(commands.includes('sense.lsp.reLaunch'), 'sense.lsp.reLaunch 应始终可用');
+        assert.ok(commands.includes('sense.lsp.state'), 'sense.lsp.state 应始终可用');
     });
 });

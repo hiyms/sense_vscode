@@ -170,10 +170,28 @@ export class SenseCli {
         };
     }
 
+    /**
+     * 可执行文件名
+     *
+     * sense 取包名中 `::` 之后、最后一个 `.` 之后的一段：`acme::app` 得到 `app`。
+     */
+    static getExecutableName(moduleName: string): string {
+        let text = moduleName;
+        const separator = text.indexOf('::');
+        if (separator >= 0) {
+            text = text.substring(separator + 2);
+        }
+        const dot = text.lastIndexOf('.');
+        if (dot >= 0) {
+            text = text.substring(dot + 1);
+        }
+        return text;
+    }
+
     /** 计算构建产物的可执行文件路径 */
     static getBinaryPath(projectDir: string, moduleName: string, profile: Profile, targetDir?: string): string {
         const root = checkIsValid(targetDir) ? targetDir! : path.join(projectDir, 'target');
         const profileDir = profile === 'release' ? 'release' : 'debug';
-        return path.join(root, profileDir, 'bin', `${moduleName}${getExecSuffix()}`);
+        return path.join(root, profileDir, 'bin', `${SenseCli.getExecutableName(moduleName)}${getExecSuffix()}`);
     }
 }

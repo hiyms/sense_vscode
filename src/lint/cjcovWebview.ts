@@ -10,11 +10,11 @@ import { OutputHelper } from '../utils/outputHelper';
 import { Webview } from '../views/webview';
 import { SenseCli } from '../build/senseCli';
 
-/** cjcov 生成覆盖率报告的命令前缀，右键路径会追加到末尾 */
-const CJCOV_COMMAND = 'cjcov -o output --html-details -i ';
-
 /** 覆盖率报告目录名，位于工作区根目录 */
 const REPORT_DIR = 'output';
+
+/** 覆盖率报告首页 */
+const REPORT_INDEX = 'index.html';
 
 /** 代码覆盖率 Webview，提供覆盖率检测、报告生成和查看功能 */
 export class CjcovWebview extends Webview {
@@ -22,6 +22,7 @@ export class CjcovWebview extends Webview {
     private disposableFolder: vscode.Disposable;
     private messageListener: vscode.Disposable | undefined;
     private messageListenerPanel: vscode.WebviewPanel | null = null;
+    private running = false;
 
     constructor() {
         super();
@@ -79,25 +80,61 @@ export class CjcovWebview extends Webview {
             return;
         }
 
-        this.closePanel();
-
-        const rightClickPath = Utility.rightClickPath(context);
         const workspaceFolder = Utility.getWorkspaceFolders();
         if (workspaceFolder === '') {
             vscode.window.showErrorMessage("Open a project folder before running coverage.");
             return;
         }
 
-        if (!(await this.execfunc(SenseCli.updateCommand(), workspaceFolder))) return;
-        if (!(await this.execfunc(SenseCli.testCommand({ coverage: true }), workspaceFolder))) return;
-        if (!(await this.execfunc(CJCOV_COMMAND, workspaceFolder, rightClickPath))) return;
+        if (this.running) {
+            OutputHelper.appendLine("coverage is already running, this request was skipped.", true);
+            return;
+        }
+        this.running = true;
+
+        const scanDir = CjcovWebview.resolveScanDir(context, workspaceFolder);
 
         try {
-            super.newPanel("cjcovWebview", "index.html");
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'sense coverage: running tests with coverage',
+                    cancellable: false,
+                },
+                async () => {
+                    if (!(await this.run(SenseCli.updateCommand(), workspaceFolder))) {
+                        throw new Error('sense update failed');
+                    }
+                    if (!(await this.run(SenseCli.testCommand({ coverage: true }), workspaceFolder))) {
+                        throw new Error('sense test --coverage failed');
+                    }
+                    const cjcov = `cjcov -o ${REPORT_DIR} --html-details -i ${SenseCli.quote(scanDir)}`;
+                    if (!(await this.run(cjcov, workspaceFolder))) {
+                        throw new Error('cjcov failed');
+                    }
+                }
+            );
+
+            super.newPanel("cjcovWebview", REPORT_INDEX);
             this.attachMessageListener();
-            this.panel!.webview.html = CjcovWebview.html("./index.html");
+            this.panel!.webview.html = CjcovWebview.html(`./${REPORT_INDEX}`);
         } catch (e: any) {
-            OutputHelper.appendLine(`coverage report cannot be shown: ${e?.message ?? e}`);
+            OutputHelper.appendLine(`coverage failed: ${e?.message ?? e}`, true);
+            OutputHelper.show();
+            vscode.window.showErrorMessage(`sense coverage failed: ${e?.message ?? e}`);
+        } finally {
+            this.running = false;
+        }
+    }
+
+    /** 覆盖率数据所在目录：右键路径为文件时取其所在目录，缺失时退化为工作区根目录 */
+    private static resolveScanDir(context: any, workspaceFolder: string): string {
+        const target = Utility.rightClickPath(context);
+        if (target === '') return workspaceFolder;
+        try {
+            return fs.statSync(target).isDirectory() ? target : path.dirname(target);
+        } catch {
+            return workspaceFolder;
         }
     }
 
@@ -118,23 +155,18 @@ export class CjcovWebview extends Webview {
     }
 
     /** 执行 shell 命令并返回执行结果 */
-    private async execfunc(command: string, cwd: string, pathArg?: string): Promise<boolean> {
-        let fullCommand = command;
-        if (pathArg !== undefined) {
-            fullCommand += pathArg;
-        }
-
+    private async run(command: string, cwd: string): Promise<boolean> {
         const exec = util.promisify(cp.exec);
         try {
             const { stdout } = await exec(
-                Utility.getExecCmd(fullCommand),
+                Utility.getExecCmd(command),
                 { cwd, encoding: "binary" }
             );
             OutputHelper.appendLine(stdout);
             return true;
         } catch (error: any) {
             const detail = error?.stderr ?? error?.message ?? 'unknown error';
-            OutputHelper.appendLine(Utility.translateMessage(String(detail)));
+            OutputHelper.appendLine(`coverage command failed: ${Utility.translateMessage(String(detail))}`, true);
             return false;
         }
     }

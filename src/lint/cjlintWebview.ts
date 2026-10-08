@@ -30,6 +30,7 @@ export class CjlintWebview extends Webview {
     private disposableFolder: vscode.Disposable;
     private messageListener: vscode.Disposable | undefined;
     private messageListenerPanel: vscode.WebviewPanel | null = null;
+    private running = false;
 
     constructor(context: vscode.ExtensionContext) {
         super();
@@ -101,6 +102,14 @@ export class CjlintWebview extends Webview {
             return;
         }
 
+        if (this.running) {
+            if (!silent) {
+                OutputHelper.appendLine("cjlint is already running, this request was skipped.", true);
+            }
+            return;
+        }
+        this.running = true;
+
         let targetPath = path.join(workspaceFolder, "src");
         if (!fs.existsSync(targetPath)) {
             targetPath = workspaceFolder;
@@ -112,6 +121,7 @@ export class CjlintWebview extends Webview {
 
         if (targetPath.indexOf("..") >= 0) {
             vscode.window.showErrorMessage("the target path is invaild!");
+            this.running = false;
             return;
         }
 
@@ -129,41 +139,43 @@ export class CjlintWebview extends Webview {
 
         const reportPath = path.join(targetPath, "./report.json");
         cp.exec(Utility.getExecCmd(command), { cwd: targetPath, encoding: "binary" }, (error, _stdout, stderr) => {
-            if (error !== null || !fs.existsSync(reportPath)) {
-                const detail = Utility.checkIsValid(stderr)
-                    ? Utility.translateMessage(stderr)
-                    : (error?.message ?? "no cjlint report was produced");
-                if (!silent) {
-                    OutputHelper.appendLine(`cjlint check failed: ${detail}`);
-                }
-                this.closePanel();
-                CjlintWebview.deleteFiles(targetPath);
-                return;
-            }
-
-            const data = fs.readFileSync(reportPath, "utf-8");
-            let result: CjlintIssue[];
             try {
-                result = JSON.parse(data);
-            } catch (e: any) {
-                OutputHelper.appendLine(`cjlint report cannot be parsed: ${e?.message ?? e}`);
-                CjlintWebview.deleteFiles(targetPath);
-                return;
-            }
-
-            CjlintWebview.deleteFiles(targetPath);
-            vscode.commands.executeCommand("sense.codecheck.diagnostic", result);
-
-            if (data === "null" || data === "[\r\n]" || result.length <= 0) {
-                if (!silent) {
-                    OutputHelper.appendLine("The cjlint check is done, there are no out-of-spec issues.\n");
+                if (error !== null || !fs.existsSync(reportPath)) {
+                    const detail = Utility.checkIsValid(stderr)
+                        ? Utility.translateMessage(stderr)
+                        : (error?.message ?? "no cjlint report was produced");
+                    if (!silent) {
+                        OutputHelper.appendLine(`cjlint check failed: ${detail}`);
+                    }
+                    CjlintWebview.deleteFiles(targetPath);
+                    return;
                 }
-                this.closePanel();
-                return;
-            }
 
-            if (autoFix) {
-                this.generateWebview(result, silent);
+                const data = fs.readFileSync(reportPath, "utf-8");
+                let result: CjlintIssue[];
+                try {
+                    result = JSON.parse(data);
+                } catch (e: any) {
+                    OutputHelper.appendLine(`cjlint report cannot be parsed: ${e?.message ?? e}`);
+                    CjlintWebview.deleteFiles(targetPath);
+                    return;
+                }
+
+                CjlintWebview.deleteFiles(targetPath);
+                vscode.commands.executeCommand("sense.codecheck.diagnostic", result);
+
+                if (data === "null" || data === "[\r\n]" || result.length <= 0) {
+                    if (!silent) {
+                        OutputHelper.appendLine("The cjlint check is done, there are no out-of-spec issues.\n");
+                    }
+                    return;
+                }
+
+                if (autoFix) {
+                    this.generateWebview(result, silent);
+                }
+            } finally {
+                this.running = false;
             }
         });
     }

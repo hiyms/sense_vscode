@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 
-import { activate as lspActivate } from './lsp/activate';
+import { activate as lspActivate, register as lspRegister } from './lsp/activate';
 import { activate as mainActivate, registerTomlUtil, registerFileWatcher } from './main/activate';
 import { Utility } from './utils/utility';
 import { OutputHelper } from './utils/outputHelper';
@@ -97,6 +97,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     registerTomlUtil();
     await mainActivate(context);
     registerFileWatcher(context);
+
+    // 命令与监听始终注册，保证未配置 SDK 时也能通过命令补救
+    lspRegister(context);
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration('sense.sdkPath') || event.affectsConfiguration('sense.executablePath')) {
+                sdkPickerDeclined = false;
+            }
+        })
+    );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('sense.sdk.select', async () => {
