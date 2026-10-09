@@ -9,12 +9,12 @@
   "icon": "images/cangjie_icon.png",
   "repository": {
     "type": "git",
-    "url": "https://gitcode.com/opencj/sense-vscode"
+    "url": "https://atomgit.com/OpenCangjieCommunity/sense_vscode.git"
   },
   "bugs": {
-    "url": "https://gitcode.com/opencj/sense-vscode/issues"
+    "url": "https://atomgit.com/OpenCangjieCommunity/sense_vscode/issues"
   },
-  "homepage": "https://gitcode.com/opencj/sense-vscode#readme",
+  "homepage": "https://atomgit.com/OpenCangjieCommunity/sense_vscode",
   "galleryBanner": {
     "color": "#1E1E2E",
     "theme": "dark"

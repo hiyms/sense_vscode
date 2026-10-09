@@ -2,7 +2,7 @@
 
 [![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/opencj.sense)](https://marketplace.visualstudio.com/items?itemName=opencj.sense)
 [![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/opencj.sense)](https://marketplace.visualstudio.com/items?itemName=opencj.sense)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://gitcode.com/opencj/sense-vscode/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://atomgit.com/OpenCangjieCommunity/sense_vscode/blob/master/LICENSE)
 
 在 Visual Studio Code 中使用 [sense](https://gitcode.com) 包管理器与 `sense lsp` 语言服务器开发仓颉（Cangjie）程序。
 
@@ -87,7 +87,7 @@
 
 ## 问题反馈
 
-在 [Issues](https://gitcode.com/opencj/sense-vscode/issues) 中反馈。提交问题时请附上 VS Code 版本、仓颉 SDK 版本、`sense lsp` 版本，以及 `sense` 输出通道的日志。
+在 [Issues](https://atomgit.com/OpenCangjieCommunity/sense_vscode/issues) 中反馈。提交问题时请附上 VS Code 版本、仓颉 SDK 版本、`sense lsp` 版本，以及 `sense` 输出通道的日志。
 
 ## 开发
 
