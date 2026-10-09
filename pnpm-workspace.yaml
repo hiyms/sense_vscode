@@ -1,5 +1,5 @@
 packages:
   - '.'
 
-ignoredBuiltDependencies:
-  - '@vscode/vsce-sign'
+allowBuilds:
+  '@vscode/vsce-sign': true

@@ -3,7 +3,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'sense.sense';
+const EXTENSION_ID = 'opencj.sense';
 
 /** 扩展应注册的全部命令 */
 const EXPECTED_COMMANDS = [

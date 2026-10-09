@@ -1,0 +1,41 @@
+name: Sense (Cangjie) Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  repository: read
+
+concurrency:
+  max: 1
+  exceed-action: QUEUE
+
+jobs:
+  publish:
+    name: 发布到 VS Code Marketplace
+    runs-on: [ubuntu-latest, x64, small]
+    steps:
+      - name: 检出代码
+        uses: checkout
+      - name: 安装 pnpm
+        run: |
+          npm install --global --prefix "$HOME/.local" pnpm@11.28.5
+          echo "$HOME/.local/bin" >> "$ATOMGIT_PATH"
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 类型检查
+        run: pnpm run check
+      - name: 打包扩展
+        run: pnpm run package
+      - name: 发布
+        run: pnpm exec vsce publish --packagePath "$(ls -1 ./*.vsix | head -n 1)"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: 上传 vsix
+        uses: upload-artifact
+        with:
+          name: sense-vsix
+          path: '*.vsix'
+          retention-days: 30

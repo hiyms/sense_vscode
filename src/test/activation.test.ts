@@ -3,7 +3,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'sense.sense';
+const EXTENSION_ID = 'opencj.sense';
 
 /** 判断测试工作区是否存在 sense.toml */
 async function hasManifest(): Promise<boolean> {

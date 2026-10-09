@@ -3,18 +3,36 @@
   "displayName": "Sense (Cangjie)",
   "description": "Cangjie language support built on the sense package manager and its sense lsp language server",
   "version": "0.1.0",
-  "publisher": "sense",
+  "packageManager": "pnpm@11.28.5",
+  "publisher": "opencj",
   "license": "Apache-2.0",
   "icon": "images/cangjie_icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://gitcode.com/opencj/sense-vscode"
+  },
+  "bugs": {
+    "url": "https://gitcode.com/opencj/sense-vscode/issues"
+  },
+  "homepage": "https://gitcode.com/opencj/sense-vscode#readme",
+  "galleryBanner": {
+    "color": "#1E1E2E",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.134.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Linters",
+    "Formatters"
   ],
   "keywords": [
     "Cangjie",
-    "sense"
+    "cj",
+    "sense",
+    "language server",
+    "lsp"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -27,10 +45,17 @@
     "onCommand:sense.lsp.activate"
   ],
   "main": "./out/extension",
+  "extensionKind": [
+    "workspace"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
       "description": "sense (Cangjie) starts the sense language server and runs build, format and lint tools from the Cangjie SDK, so it requires a trusted workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "sense (Cangjie) needs the Cangjie SDK, the sense executable and build artifacts on a real filesystem."
     }
   },
   "scripts": {
@@ -42,6 +67,7 @@
     "build": "pnpm run check && pnpm run webpack",
     "watch": "tsc -watch -p ./",
     "package": "pnpm run webpack && vsce package --no-dependencies",
+    "publish": "pnpm run webpack && vsce publish --no-dependencies",
     "pretest": "pnpm run compile",
     "test": "vscode-test"
   },

@@ -3,7 +3,9 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'sense.sense';
+import { getProgressTracker } from '../lsp/progress';
+
+const EXTENSION_ID = 'opencj.sense';
 const STARTUP_TIMEOUT_MS = 90_000;
 
 /** 从环境变量读取 sense 可执行文件与 SDK，未配置时返回 undefined */
@@ -118,5 +120,34 @@ suite('sense 语言服务器', () => {
         // 恢复运行，避免影响后续用例
         await vscode.commands.executeCommand('sense.lsp.reLaunch');
         assert.ok(await waitFor(isRunning, STARTUP_TIMEOUT_MS), '显式重启应能重新拉起语言服务');
+    });
+
+    test('启动过程中拦截到服务端创建的索引进度', async function () {
+        this.timeout(STARTUP_TIMEOUT_MS + 60_000);
+        const environment = readEnvironment();
+        if (environment === undefined || !(await hasManifest())) {
+            this.skip();
+            return;
+        }
+
+        const tracker = getProgressTracker();
+        const originalCreate = tracker.create;
+        let observed = 0;
+        tracker.create = (token) => {
+            observed += 1;
+            originalCreate.call(tracker, token);
+        };
+
+        try {
+            await prepare(environment);
+            await vscode.commands.executeCommand('sense.lsp.reLaunch');
+            assert.ok(await waitFor(isRunning, STARTUP_TIMEOUT_MS), '语言服务应进入 Running 状态');
+            assert.ok(
+                await waitFor(async () => observed > 0, 30_000),
+                '启动过程中应拦截到服务端创建的索引进度 token'
+            );
+        } finally {
+            tracker.create = originalCreate;
+        }
     });
 });

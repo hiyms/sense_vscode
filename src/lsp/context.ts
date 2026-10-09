@@ -25,6 +25,7 @@ import { spawnSenseLsp, SenseLspTransport } from './bridge';
 import * as middleware from './middleware';
 import { activate as activateHealthCheck } from './healthCheck';
 import { getStatusBar } from './statusBar';
+import { createProgressMessageStrategy, getProgressTracker } from './progress';
 
 /**
  * sense 语言客户端。
@@ -407,6 +408,9 @@ export class SenseContext implements vscode.Disposable {
             traceOutputChannel: OutputHelper.getTraceChannel(),
             revealOutputChannelOn: RevealOutputChannelOn.Never,
             initializationOptions: {},
+            connectionOptions: {
+                messageStrategy: createProgressMessageStrategy(getProgressTracker()),
+            },
             errorHandler: senseErrorHandler,
             synchronize: {
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*', false, true, false),
@@ -510,6 +514,7 @@ export class SenseContext implements vscode.Disposable {
     /** 统一上报停止状态，避免状态栏与实际运行状态不一致 */
     private reportStopped(): void {
         Utility.serverRun = false;
+        getProgressTracker().clear();
         vscode.commands.executeCommand('sense.lsp.updateState', {
             state: lspConstants.State.Stopped,
             serverVersion: SenseContext.envInfo.serverVersion,

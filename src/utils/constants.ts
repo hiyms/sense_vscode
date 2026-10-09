@@ -1,6 +1,6 @@
 /** @file 扩展通用常量定义 */
 
-export const extensionId: string = 'sense.sense';
+export const extensionId: string = 'opencj.sense';
 export const extensionOutputChannelName: string = 'sense';
 export const senseTomlName: string = 'sense.toml';
 export const senseLockName: string = 'sense.lock';

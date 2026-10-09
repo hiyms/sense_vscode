@@ -23,3 +23,9 @@ export const delay100: number = 100;
 
 /** LSP 文档选择器使用的语言标识 */
 export const cangjieLanguageId: string = 'Cangjie';
+
+/** 服务端创建进度 token 的方法名 */
+export const workDoneProgressCreateMethod: string = 'window/workDoneProgress/create';
+
+/** 服务端上报进度的方法名 */
+export const progressNotificationMethod: string = '$/progress';
