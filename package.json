@@ -1,6 +1,6 @@
 {
   "name": "sense",
-  "displayName": "Sense (Cangjie)",
+  "displayName": "Sense (Cangjie) support for VSCode",
   "description": "Cangjie language support built on the sense package manager and its sense lsp language server",
   "version": "0.1.0",
   "packageManager": "pnpm@11.28.5",
