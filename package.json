@@ -114,6 +114,14 @@
         "path": "./syntaxes/Cangjie.tmLanguage.json"
       }
     ],
+    "tomlValidation": [
+      {
+        "url": "https://raw.githubusercontent.com/hiyms/sense_vscode/master/schemas/sense-manifest.schema.json",
+        "fileMatch": [
+          "sense.toml"
+        ]
+      }
+    ],
     "semanticTokenTypes": [
       {
         "id": "builtinType",

@@ -18,6 +18,7 @@
 
 - **语法与语义高亮**：`.cj` 源文件、语义 token 类型（内建类型、`this`、类型别名、注解）与各主题的回退 scope。
 - **语言服务**：基于 `sense lsp`，提供补全、定义跳转、查找引用、悬浮提示、重命名、大纲、类型层次、调用层次、诊断等能力。
+- **清单补全**：`sense.toml` 的键名、取值与错误提示，通过 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml) 扩展加载本插件声明的 JSON Schema 获得。
 - **索引进度**：语言服务器建立工程索引时，进度会显示在状态栏的 `sense` 条目上。
 - **格式化**：调用 SDK 自带 `cjfmt`，支持整文件与选区格式化。
 - **静态检查**：调用 SDK 自带 `cjlint`，支持保存时检查与结果面板跳转。
@@ -34,6 +35,7 @@
 - Visual Studio Code 1.134 或更高版本。
 - 仓颉 SDK：通过 `sense.sdkPath` 设置或 `CANGJIE_HOME` 环境变量提供，且包含 `bin/cjc`、`tools/bin/LSPServer`、`envsetup.sh`。
 - `sense` 可执行文件：通过 `sense.executablePath` 设置或 PATH 提供。`sense docs` 还需要 `sense_docs` 与 `cangjie-docs`。
+- `sense.toml` 的补全与校验需要安装 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml) 扩展。
 
 ## 快速开始
 

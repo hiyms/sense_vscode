@@ -1,0 +1,365 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/hiyms/sense_vscode/master/schemas/sense-manifest.schema.json",
+  "title": "sense.toml",
+  "description": "Sense package manifest. Requires [module] or [workspace].",
+  "type": "object",
+
+  "definitions": {
+    "Module": {
+      "title": "Module",
+      "description": "Module metadata.",
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "description": "Module name. Must match the dependency key.",
+          "type": "string",
+          "minLength": 1,
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/module-name"
+            }
+          }
+        },
+        "version": {
+          "description": "Semantic version, e.g. 1.2.3. Missing means 0.0.0.",
+          "type": "string",
+          "examples": ["0.1.0", "1.2.3"],
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/module-version"
+            }
+          }
+        },
+        "authors": {
+          "description": "List of authors.",
+          "type": "array",
+          "items": { "type": "string" },
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/module-authors"
+            }
+          }
+        },
+        "license": {
+          "description": "License identifier, e.g. Apache-2.0.",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/module-license"
+            }
+          }
+        },
+        "script": {
+          "description": "Build script filename: a single .cj file in the module directory, e.g. \"build.cj\". Paths or non-.cj suffixes are errors.",
+          "type": "string",
+          "pattern": "^[^/\\\\]+\\.cj$",
+          "examples": ["build.cj"],
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/build-script"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "x-taplo": {
+        "initKeys": ["name", "version"]
+      }
+    },
+
+    "Workspace": {
+      "title": "Workspace",
+      "description": "Workspace declaration. The manifest containing [workspace] is the workspace root.",
+      "type": "object",
+      "properties": {
+        "member": {
+          "description": "Member directories relative to workspace root. Must be inside root and unique.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/workspace-member"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "x-taplo": {
+        "initKeys": ["member"]
+      }
+    },
+
+    "DependencySpec": {
+      "title": "Detailed Dependency",
+      "description": "Detailed dependency. Requires either git or path. branch/tag/hash are mutually exclusive and only valid with git.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Local path (without git) or subdirectory within the git repo (with git).",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-path"
+            }
+          }
+        },
+        "git": {
+          "description": "Git repository URL. Must be scheme://…, file://…, or user@host:path.",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-git"
+            }
+          }
+        },
+        "branch": {
+          "description": "Git branch. Mutually exclusive with tag and hash; requires git.",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-branch"
+            }
+          }
+        },
+        "tag": {
+          "description": "Git tag. Mutually exclusive with branch and hash; requires git.",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-tag"
+            }
+          }
+        },
+        "hash": {
+          "description": "Git commit. Mutually exclusive with branch and tag; requires git.",
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-hash"
+            }
+          }
+        },
+        "features": {
+          "description": "Features to enable for this dependency. module/feature enables a feature in another module.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" },
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-features"
+            }
+          }
+        },
+        "optional": {
+          "description": "Optional dependency; only built when enabled by a feature.",
+          "type": "boolean",
+          "default": false,
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-optional"
+            }
+          }
+        },
+        "default_features": {
+          "description": "Enable the dependency's [features] defaults. Use underscore; \"default-features\" is an error.",
+          "type": "boolean",
+          "default": true,
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-default-features"
+            }
+          }
+        },
+        "dynamic": {
+          "description": "Link this dependency as a dynamic library.",
+          "type": "boolean",
+          "default": false,
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/dependency-dynamic"
+            }
+          }
+        },
+        "extern": {
+          "description": "Not supported; specifying it is an error.",
+          "type": "boolean",
+          "deprecated": true,
+          "x-taplo": {
+            "hidden": true
+          }
+        }
+      },
+      "additionalProperties": false,
+      "x-taplo": {
+        "initKeys": ["path", "git"]
+      }
+    },
+
+    "Dependency": {
+      "title": "Dependency",
+      "description": "Shorthand dependency: file:<path> for local, git+<repo> for git. Supports @branch and #dir=<subdir>.",
+      "type": "string",
+      "pattern": "^(file:.+|git\\+.+)$",
+      "examples": [
+        "file:../helper",
+        "git+https://gitcode.com/org/utils.git",
+        "git+ssh://git@gitcode.com/org/mono.git@main#dir=components/tools"
+      ],
+      "x-taplo": {
+        "links": {
+          "key": "https://example.com/sense/dependencies"
+        }
+      }
+    },
+
+    "Profile": {
+      "title": "Profile",
+      "description": "Build profile settings shared by dev and release.",
+      "type": "object",
+      "properties": {
+        "opt-level": {
+          "description": "Optimization level. Max 2 (no -O3). \"s\" or \"z\" cannot be combined with lto. Default: dev 0, release 2.",
+          "enum": [0, 1, 2, "s", "z"],
+          "x-taplo": {
+            "docs": {
+              "enumValues": [
+                "No optimization. Default for dev.",
+                "Light optimization.",
+                "Heavy optimization. Default for release.",
+                "Optimize for size. Cannot be used with lto.",
+                "Optimize for size aggressively. Cannot be used with lto."
+              ]
+            },
+            "links": {
+              "key": "https://example.com/sense/profile-opt-level"
+            }
+          }
+        },
+        "debug": {
+          "description": "Emit debug info. Default: dev true, release false.",
+          "type": "boolean",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/profile-debug"
+            }
+          }
+        },
+        "lto": {
+          "description": "Link-time optimization. Default \"off\" for both. Cannot be used with \"s\" or \"z\" opt-level.",
+          "oneOf": [
+            { "type": "boolean" },
+            { "enum": ["off", "thin", "full", "fat"] }
+          ],
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/profile-lto"
+            }
+          }
+        },
+        "overflow-checks": {
+          "description": "Enable integer overflow checks. Default: dev true, release false.",
+          "type": "boolean",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/profile-overflow-checks"
+            }
+          }
+        },
+        "strip": {
+          "description": "Strip symbols. Default false for both.",
+          "type": "boolean",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/profile-strip"
+            }
+          }
+        },
+        "static": {
+          "description": "Pass --static to cjc, linking Cangjie libraries statically into executables. Only affects executable linking. Default: dev false, release true.",
+          "type": "boolean",
+          "x-taplo": {
+            "links": {
+              "key": "https://example.com/sense/profile-static"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "properties": {
+    "module": {
+      "$ref": "#/definitions/Module"
+    },
+    "workspace": {
+      "$ref": "#/definitions/Workspace"
+    },
+    "dependencies": {
+      "description": "Normal dependencies. Only local paths or git repos; no registry. Workspace root dependencies apply to all members.",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/definitions/Dependency" },
+          { "$ref": "#/definitions/DependencySpec" }
+        ]
+      },
+      "x-taplo": {
+        "links": {
+          "key": "https://example.com/sense/dependencies"
+        }
+      }
+    },
+    "script-dependencies": {
+      "description": "Build script dependencies. Resolved independently from [dependencies].",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/definitions/Dependency" },
+          { "$ref": "#/definitions/DependencySpec" }
+        ]
+      },
+      "x-taplo": {
+        "links": {
+          "key": "https://example.com/sense/script-dependencies"
+        }
+      }
+    },
+    "features": {
+      "description": "Feature declarations. Reserved key \"defaults\" lists default features; \"default\" is an error.",
+      "type": "object",
+      "additionalProperties": {
+        "description": "Items directly enabled by this feature: another feature name, dep:<dependency>, or an optional dependency name.",
+        "type": "array",
+        "items": { "type": "string" },
+        "uniqueItems": true
+      },
+      "x-taplo": {
+        "links": {
+          "key": "https://example.com/sense/features"
+        }
+      }
+    },
+    "profile": {
+      "description": "Build profiles. Each member uses its own [profile] if present, else workspace root, else defaults.",
+      "type": "object",
+      "properties": {
+        "dev": { "$ref": "#/definitions/Profile" },
+        "release": { "$ref": "#/definitions/Profile" }
+      },
+      "additionalProperties": false,
+      "x-taplo": {
+        "links": {
+          "key": "https://example.com/sense/profile"
+        }
+      }
+    }
+  },
+
+  "additionalProperties": false,
+  "x-taplo": {
+    "initKeys": ["module", "workspace", "dependencies", "features", "profile"]
+  }
+}
